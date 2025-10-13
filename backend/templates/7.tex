@@ -1,0 +1,152 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{fontspec}
+\usepackage{fontawesome5}
+\usepackage{calc}
+\usepackage{tikz}
+
+% Set page margins
+\geometry{
+    top=0.8in,
+    bottom=0.8in,
+    left=0.8in,
+    right=0.8in
+}
+
+% Set fonts
+\setmainfont{Roboto}
+
+% Define colors
+\definecolor{bluepurple}{RGB}{102, 102, 255}
+\definecolor{magenta}{RGB}{204, 51, 153}
+\definecolor{darkgray}{RGB}{85, 85, 85}
+\definecolor{lightgray}{RGB}{128, 128, 128}
+
+% Remove page numbering
+\pagestyle{empty}
+
+% Remove paragraph indentation
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0pt}
+
+\begin{document}
+
+% Header section
+{\color{bluepurple}\fontsize{24}{28}\selectfont\bfseries THOMAS BEASLEY}
+
+\vspace{1em}
+
+% Contact information with icons
+\begin{minipage}[t]{0.5\textwidth}
+    \faPhone\ (770) 625-9660\\[0.3em]
+    \faEnvelope\ thomasb@gmail.com\\[0.3em]
+    \faMapMarker\ 366 Margaret Street,Houston, TX 47587\\[0.3em]
+    \faLinkedin\ linkedin.com/in/thomas.beasley
+\end{minipage}
+
+\vspace{1.5em}
+
+% Summary Section
+{\color{magenta}\fontsize{14}{16}\selectfont\bfseries SUMMARY}
+
+\vspace{0.5em}
+
+Financial Advisor with 7+ years of experience delivering financial/investment advisory services to high value clients. Proven success in managing multi-million dollar portfolios, driving profitability, and increasing ROI through skillful strategic planning, consulting, and financial advisory services.
+
+\vspace{1.5em}
+
+% Professional Experience Section
+{\color{magenta}\fontsize{14}{16}\selectfont\bfseries PROFESSIONAL EXPERIENCE}
+
+\vspace{0.8em}
+
+\begin{minipage}[t]{0.25\textwidth}
+    \raggedright
+    Month 20XX --\\
+    Present
+\end{minipage}
+\hfill
+\begin{minipage}[t]{0.7\textwidth}
+    {\color{bluepurple}\bfseries Wells Fargo Advisors, Houston, TX | Senior Financial Advisor}
+    \begin{itemize}[leftmargin=1em, itemsep=0.3em]
+        \item Deliver financial advice to clients, proposing strategies to achieve short and long-term objectives for investments, insurance, business and estate planning with minimal risk
+        \item Develop, review, and optimize investment portfolios for 300+ high value clients with over \$190M AUM (Assets Under Management)
+        \item Ensure maximum client satisfaction by providing exceptional and personalized service, enhancing client satisfaction ratings from 88\% to 99.9\% in less than 6 months
+    \end{itemize}
+\end{minipage}
+
+\vspace{1em}
+
+\begin{minipage}[t]{0.25\textwidth}
+    \raggedright
+    Month 20XX --\\
+    Present
+\end{minipage}
+\hfill
+\begin{minipage}[t]{0.7\textwidth}
+    {\color{bluepurple}\bfseries SunTrust Investment Services, New Orleans, LA | Financial Advisor}
+    \begin{itemize}[leftmargin=1em, itemsep=0.3em]
+        \item Served as knowledgeable financial advisor to clients, managing an over \$20.75M investment portfolio of 90+ individual and corporate clients
+        \item Devised and applied a new training and accountability program that increased productivity from \#10 to \#3 in the region in less than 2 year period
+        \item Partnered with cross-functional teams in consulting with clients to provide asset management risk strategy and mitigation, which increased AUM by 50\%
+    \end{itemize}
+\end{minipage}
+
+\vspace{1em}
+
+\begin{minipage}[t]{0.25\textwidth}
+    \raggedright
+    Month 20XX --\\
+    Present
+\end{minipage}
+\hfill
+\begin{minipage}[t]{0.7\textwidth}
+    {\color{bluepurple}\bfseries Maverick Capital Management, New Orleans, LA | Financial Advisor}
+    \begin{itemize}[leftmargin=1em, itemsep=0.3em]
+        \item Served as the primary point of contact for over 15 clients
+        \item Managed the portfolios of several major clients with over \$8.5M in total assets
+    \end{itemize}
+\end{minipage}
+
+\vspace{1.5em}
+
+% Education and Additional Skills sections
+\begin{minipage}[t]{0.48\textwidth}
+    {\color{magenta}\fontsize{14}{16}\selectfont\bfseries EDUCATION}
+    
+    \vspace{0.5em}
+    
+    \textbf{Louisiana State University-- Baton Rouge, LA}\\
+    Bachelor of Science in Business, July 20XX
+\end{minipage}
+\hfill
+\begin{minipage}[t]{0.48\textwidth}
+    {\color{magenta}\fontsize{14}{16}\selectfont\bfseries ADDITIONAL SKILLS}
+    
+    \vspace{0.5em}
+    
+    \begin{itemize}[leftmargin=1em, itemsep=0.2em]
+        \item Proficient in MS Office (Word, Excel, PowerPoint)
+        \item MS Project
+        \item Salesforce
+    \end{itemize}
+\end{minipage}
+
+% Decorative bottom design
+\vfill
+\noindent
+\begin{minipage}{\textwidth}
+    \begin{tikzpicture}[anchor=south west]
+        % Blue-purple horizontal bar across bottom
+        \fill[color=bluepurple] (0,0) rectangle (\textwidth,0.8cm);
+        % Magenta triangle cutting in from top right
+        \fill[color=magenta] (\textwidth-4cm,0.8cm) -- (\textwidth,0.8cm) -- (\textwidth,0) -- cycle;
+    \end{tikzpicture}
+\end{minipage}
+
+\end{document}
