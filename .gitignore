@@ -1,0 +1,5 @@
+# Ignore the local vector database
+chroma_db_market/
+
+# Ignore all .env files
+**/.env
