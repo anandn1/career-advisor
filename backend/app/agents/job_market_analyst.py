@@ -5,7 +5,8 @@ from langchain.tools import tool
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from langchain.agents import create_agent
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+#from langgraph.checkpoint.sqlite import SqliteSaver
 
 # --- 1. Settings Import ---
 # Import the shared LLM, embedding function, and DB path
@@ -88,6 +89,11 @@ def _format_job_as_document(job_details: Dict[str, Any]) -> Document:
 # This db object is our shared "long-term memory"
 db = get_vectorstore()
 print("Vector store initialized and ready.")
+text_splitter = RecursiveCharacterTextSplitter(
+    chunk_size=1000,
+    chunk_overlap=150,
+    length_function=len,
+)
 
 # --- 6. Define Agent Tools ---
 
@@ -123,62 +129,56 @@ def search_internal_knowledge(query: str) -> str:
 print("Building live scraper tool ('scrape_live_job_market')...")
 @tool
 def scrape_live_job_market(role: str, location: str, num_pages: int = 1) -> str:
-    """
-    Fetches *new* job postings directly from the live web scraper API.
-    Use this tool ONLY when the user asks for 'live', 'recent', or 'new' jobs,
-    or if 'search_internal_knowledge' fails to find specific, up-to-date information.
-    
-    This tool automatically adds the new jobs to the internal knowledge base.
-    """
+    """Fetches *new* job postings..."""
     print(f"\n--- AGENT ACTION: Calling Live Scraper ---")
-    print(f"Role: {role}, Location: {location}")
     
-    all_new_documents = []
+    # This list will now hold CHUNKS
+    all_new_chunks = []
     
     try:
-        # Call /api/jobs on your scraper service
+        # ... (API call logic) ...
         jobs_url = f"{SCRAPER_API_BASE_URL}/api/jobs"
-        params = {"role": role, "location": location, "page": 1} # Simplified for agent
+        params = {"role": role, "location": location, "page": 1}
         response = requests.get(jobs_url, params=params, timeout=20)
         response.raise_for_status()
-        jobs_list = response.json() # Get JSON response
+        jobs_list = response.json()
         
         if not jobs_list:
             return f"Scraper found 0 new jobs for '{role}' in '{location}'."
-        
-        # Call /api/jobs/description for each job
+
         for job_summary in jobs_list:
+            # ... (API call for details is the same) ...
             job_link = job_summary.get('link')
             if not job_link: continue
-            
             desc_url = f"{SCRAPER_API_BASE_URL}/api/jobs/description"
             desc_params = {"url": job_link}
             desc_response = requests.get(desc_url, params=desc_params, timeout=20)
             
             if desc_response.status_code == 200:
-                job_details = desc_response.json() # Get JSON response
+                job_details = desc_response.json()
                 full_job_data = {**job_summary, **job_details}
                 
-                # Use our "in-memory JSON loader" to format it
+                # 1. We create the single, long document
                 doc = _format_job_as_document(full_job_data)
-                all_new_documents.append(doc)
+                
+                # --- 2. THIS IS THE NEW STEP ---
+                # We split the long document into smaller chunks
+                chunks = text_splitter.split_documents([doc])
+                
+                # 3. We add the chunks to our list
+                all_new_chunks.extend(chunks)
 
     except requests.RequestException as e:
-        print(f"ERROR in scrape_live_job_market: {e}")
         return f"Error: Failed to contact the job scraper API. {e}"
 
-    # --- This is the "self-improving" step ---
-    if all_new_documents:
-        print(f"Ingesting {len(all_new_documents)} new documents into vector store...")
-        db.add_documents(all_new_documents)
-        print("Ingestion complete.")
+    # --- UPDATED INGESTION ---
+    if all_new_chunks:
+        # Now we add the chunks, not the full docs
+        print(f"Ingesting {len(all_new_chunks)} new document chunks into vector store...")
+        db.add_documents(all_new_chunks)
         
-        return (
-            f"Successfully scraped and ingested {len(all_new_documents)} new jobs. "
-            "You should now analyze this new data (using search_internal_knowledge) "
-            "to answer the user's question."
-        )
-    
+        return f"Successfully scraped and ingested {len(all_new_chunks)} new job chunks."
+        
     return "No new jobs were successfully scraped and ingested."
 
 # --- 7. Create the Agent ---
@@ -211,6 +211,6 @@ agent = create_agent(llm, tools=all_tools,system_prompt=AGENT_SYSTEM_PROMPT)
 
 print("--- Job Market Analyst Agent is Ready ---")
 result = agent.invoke(
-    {"messages": [{"role": "user", "content": "Are there any jobs for a 'Rust Engineer' in 'Berlin'?"}]}
+    {"messages": [{"role": "user", "content": "What are the most in-demand skills for a Full Stack job in Hyderabad ???"}]}
 )
 print(result["messages"][-1].content)
