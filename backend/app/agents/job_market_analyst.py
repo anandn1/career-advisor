@@ -6,7 +6,7 @@ from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from langchain.agents import create_agent
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-#from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.checkpoint.postgres import PostgresSaver
 
 # --- 1. Settings Import ---
 # Import the shared LLM, embedding function, and DB path
@@ -205,12 +205,20 @@ You have two tools:
     After scraping, use the tool's summary to tell the user what you found.
 """
 
-
+DB_URI = "postgres://f1879c06ec098d1521da313181510b7369ce1e0eed5cc875ab654a8aa2880405:sk_qY9w6ACyeEYYkjO1viCFo@db.prisma.io:5432/postgres?sslmode=require"
 # Create the agent
-agent = create_agent(llm, tools=all_tools,system_prompt=AGENT_SYSTEM_PROMPT)
+with PostgresSaver.from_conn_string(DB_URI) as checkpointer:
+    checkpointer.setup()
+    agent = create_agent(llm, tools=all_tools,system_prompt=AGENT_SYSTEM_PROMPT,checkpointer=checkpointer,)
 
-print("--- Job Market Analyst Agent is Ready ---")
-result = agent.invoke(
-    {"messages": [{"role": "user", "content": "What are the most in-demand skills for a Full Stack job in Hyderabad ???"}]}
-)
-print(result["messages"][-1].content)
+    print("--- Job Market Analyst Agent is Ready ---")
+    result1 = agent.invoke(
+        {"messages": [{"role": "user", "content": "What are the  Full Stack job postings available in Hyderabad ?"}]},
+        {"configurable": {"thread_id": "1"}}
+    )
+    print(result1["messages"][-1].content)
+    result2 = agent.invoke(
+        {"messages": [{"role": "user", "content": "From what location have I asked you to find job posting? what type of jobs did I ask you to find? In the job posting I have asked you to find, what are the most in-demand skills ?"}]},
+        {"configurable": {"thread_id": "1"}}
+    )
+    print(result2["messages"][-1].content)
