@@ -3,7 +3,9 @@ import glob
 from pathlib import Path
 from huggingface_hub import InferenceClient
 import requests
+from dotenv import load_dotenv
 
+load_dotenv()
 
 
 def generate_resume_tags(client: InferenceClient, tex_file_path: str) -> dict:
@@ -36,7 +38,10 @@ For example: Technology, Software Development, Startup
         {"role": "user", "content": user_instructions},
     ]
 
+    MODEL_NAME= "meta-llama/Meta-Llama-3-8B-Instruct"
+
     response = client.chat_completion(
+        model=MODEL_NAME,
         messages=messages,
         max_tokens=50,
         temperature=0.1
@@ -60,8 +65,10 @@ def process_resumes_in_folder(directory_path: str):
     """
     Finds all .tex files in a directory and processes them one by one.
     """
-    MODEL_NAME= "meta-llama/Meta-Llama-3-8B-Instruct"
-    client = InferenceClient(model=MODEL_NAME)# Initialize the client once
+    client = InferenceClient(
+    provider="novita",
+    api_key=os.environ["HUGGINGFACE_API_TOKEN"],
+)
     tex_files = glob.glob(os.path.join(directory_path, '*.tex'))
    
     
