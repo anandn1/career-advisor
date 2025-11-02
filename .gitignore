@@ -2,4 +2,6 @@
 chroma_db_market/
 
 # Ignore all .env files
-**/.env
+**/.env\
+.venv/
+venv/
