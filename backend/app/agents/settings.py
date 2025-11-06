@@ -26,6 +26,14 @@ if not api_key:
     raise ValueError("GROQ_API_KEY not found in .env file. "
                      "Please add it to backend/.env")
 
+COHERE_API_KEY = os.environ.get("COHERE_API_KEY")
+if not COHERE_API_KEY:
+    print("WARNING: COHERE_API_KEY not found. Re-ranker will not function.")
+
+DB_URI = os.environ.get("DB_URL")
+if not DB_URI:
+    raise ValueError("POSTGRES_DB_URI not found...")
+
 print("Initializing shared LLM (Groq Llama 3.3 70B)...")
 llm = ChatGroq(
     temperature=0,
