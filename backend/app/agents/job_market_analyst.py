@@ -6,15 +6,26 @@ from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from langchain.agents import create_agent
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_classic.retrievers.contextual_compression import (
+    ContextualCompressionRetriever,
+)
+from langchain_cohere import CohereRerank
 from langgraph.checkpoint.postgres import PostgresSaver
-
+from langchain.messages import RemoveMessage
+from langgraph.graph.message import REMOVE_ALL_MESSAGES
+from langchain.agents import create_agent, AgentState
+from langchain.agents.middleware import before_model
+from langgraph.runtime import Runtime
+from langchain_core.runnables import RunnableConfig
 # --- 1. Settings Import ---
 # Import the shared LLM, embedding function, and DB path
 print("Loading agent settings from core.settings...")
 from settings import (
     llm,
     embedding_function,
-    CHROMA_PERSIST_DIR
+    CHROMA_PERSIST_DIR,
+    DB_URI,
+    COHERE_API_KEY
 )
 
 # --- 2. Configuration ---
@@ -94,7 +105,18 @@ text_splitter = RecursiveCharacterTextSplitter(
     chunk_overlap=150,
     length_function=len,
 )
-
+#Base retriver
+base_retriever = db.as_retriever(search_kwargs={"k": 25})
+#Reranker
+reranker = CohereRerank(
+    cohere_api_key=COHERE_API_KEY, 
+    model="rerank-english-v3.0", 
+    top_n=3 
+)
+compression_retriever = ContextualCompressionRetriever(
+    base_compressor=reranker, 
+    base_retriever=base_retriever
+)
 # --- 6. Define Agent Tools ---
 
 # --- Tool 1: The RAG Pipeline ---
@@ -108,8 +130,8 @@ def search_internal_knowledge(query: str) -> str:
     print(f"\n--- AGENT ACTION: Calling RAG Tool ---")
     print(f"Query: {query}")
     
-    # Use the globally defined 'db' to search
-    retrieved_docs = db.similarity_search(query, k=10)
+    
+    retrieved_docs = compression_retriever.invoke(query)
     
     if not retrieved_docs:
         return "No information found in the database for that query."
@@ -180,7 +202,38 @@ def scrape_live_job_market(role: str, location: str, num_pages: int = 1) -> str:
         return f"Successfully scraped and ingested {len(all_new_chunks)} new job chunks."
         
     return "No new jobs were successfully scraped and ingested."
+# Message trimming ,We define how many messages to keep. 10 = 5 user, 5 assistant.
+MAX_MESSAGES_TO_KEEP = 10
 
+@before_model
+def trim_messages(state: AgentState, runtime: Runtime) -> dict[str, Any] | None:
+    """
+    This middleware intercepts the agent's state *before* calling the LLM
+    and truncates the message history to prevent token overflow.
+    """
+    messages = state["messages"]
+    
+    # +1 to account for the System Prompt
+    if len(messages) <= MAX_MESSAGES_TO_KEEP + 1:
+        return None  # No changes needed, history is short
+
+    print(f"--- Trimming History: {len(messages)} messages found ---")
+
+    # Keep the first message (the System Prompt) and the last N messages
+    first_msg = messages[0] # This is our AGENT_SYSTEM_PROMPT
+    recent_messages = messages[-MAX_MESSAGES_TO_KEEP:]
+    
+    new_messages = [first_msg] + recent_messages
+    
+    print(f"--- Trimming History: Reduced to {len(new_messages)} messages ---")
+
+    # This replaces the *entire* history with our new, trimmed list
+    return {
+        "messages": [
+            RemoveMessage(id=REMOVE_ALL_MESSAGES),
+            *new_messages
+        ]
+    }
 # --- 7. Create the Agent ---
 
 print("Building the agent 'brain'...")
@@ -205,15 +258,21 @@ You have two tools:
     After scraping, use the tool's summary to tell the user what you found.
 """
 
-DB_URI = "postgres://f1879c06ec098d1521da313181510b7369ce1e0eed5cc875ab654a8aa2880405:sk_qY9w6ACyeEYYkjO1viCFo@db.prisma.io:5432/postgres?sslmode=require"
+
 # Create the agent
 with PostgresSaver.from_conn_string(DB_URI) as checkpointer:
     checkpointer.setup()
-    agent = create_agent(llm, tools=all_tools,system_prompt=AGENT_SYSTEM_PROMPT,checkpointer=checkpointer,)
+    agent = create_agent(
+                        llm, 
+                         tools=all_tools,
+                         system_prompt=AGENT_SYSTEM_PROMPT,
+                         checkpointer=checkpointer,
+                         middleware=[trim_messages],
+                         )
 
     print("--- Job Market Analyst Agent is Ready ---")
     result1 = agent.invoke(
-        {"messages": [{"role": "user", "content": "What are the  Full Stack job postings available in Hyderabad ?"}]},
+        {"messages": [{"role": "user", "content": "What are the  Full Stack job postings available in Kolkata ?"}]},
         {"configurable": {"thread_id": "1"}}
     )
     print(result1["messages"][-1].content)
