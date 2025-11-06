@@ -272,12 +272,12 @@ with PostgresSaver.from_conn_string(DB_URI) as checkpointer:
 
     print("--- Job Market Analyst Agent is Ready ---")
     result1 = agent.invoke(
-        {"messages": [{"role": "user", "content": "What are the  Full Stack job postings available in Chennai ?"}]},
+        {"messages": [{"role": "user", "content": "What are the  Full Stack job postings available in Kolkata ?"}]},
         {"configurable": {"thread_id": "1"}}
     )
     print(result1["messages"][-1].content)
-result2 = agent.invoke(
+    result2 = agent.invoke(
         {"messages": [{"role": "user", "content": "From what location have I asked you to find job posting? what type of jobs did I ask you to find? In the job posting I have asked you to find, what are the most in-demand skills ?"}]},
         {"configurable": {"thread_id": "1"}}
     )
-print(result2["messages"][-1].content)
+    print(result2["messages"][-1].content)
