@@ -1,110 +1,138 @@
-%%%%%%%%%%%%%%%
-% This CV example/template is based on my own
-% CV which I (lamely attempted) to clean up, so that
-% it's less of an eyesore and easier for others to use.
-%
-% LianTze Lim (liantze@gmail.com)
-% 23 Oct, 2022
-% 24 Aug, 2024 -- Updated X (Twitter) icon
-\documentclass[a4paper,skipsamekey,11pt,english]{curve}
+\documentclass[a4paper,11pt]{article}
 
-% Uncomment to enable Chinese; needs XeLaTeX
-% \usepackage{ctex}
+% ----------------------------------
+% Packages
+% ----------------------------------
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[a4paper,margin=1in]{geometry}
+\usepackage{titlesec}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{fontawesome5}
+\usepackage{parskip}
 
+% ----------------------------------
+% Colors and Section Styles
+% ----------------------------------
+\definecolor{royalblue}{HTML}{003399}
+\definecolor{lightgray}{gray}{0.3}
 
-% Default biblatex style used for the publication list is APA6. If you wish to use a different style or pass other options to biblatex you can change them here. 
-\PassOptionsToPackage{style=ieee,sorting=ydnt,uniquename=init,defernumbers=true}{biblatex}
+\titleformat{\section}
+  {\Large\bfseries\sffamily\color{royalblue}}
+  {}{0em}{}[\titlerule]
+  
+\titleformat{\subsection}
+  {\bfseries\sffamily\color{royalblue}}
+  {}{0em}{}
 
-% Most commands and style definitions are in settings.sty.
-\usepackage{settings}
-
-% If you need to further customise your biblatex setup e.g. with \DeclareFieldFormat etc please add them here AFTER loading settings.sty. For example, to remove the default "[Online] Available:" prefix before URLs when using the IEEE style:
-\DefineBibliographyStrings{english}{url={\textsc{url}}}
-
-%% Only needed if you want a Publication List
-\addbibresource{own-bib.bib}
-
-%% Specify your last name(s) and first name(s) (as given in the .bib) to automatically bold your own name in the publications list. 
-%% One caveat: You need to write \bibnamedelima where there's a space in your name for this to work properly; or write \bibnamedelimi if you use initials in the .bib
-% \mynames{Lim/Lian\bibnamedelima Tze}
-
-%% You can specify multiple names like this, especially if you have changed your name or if you need to highlight multiple authors. See items 6–9 in the example "Journal Articles" output.
-\mynames{Lim/Lian\bibnamedelima Tze,
-  Wong/Lian\bibnamedelima Tze,
-  Lim/Tracy,
-  Lim/L.\bibnamedelimi T.}
-%% MAKE SURE THERE IS NO SPACE AFTER THE FINAL NAME IN YOUR \mynames LIST
-
-% Change the fonts if you want
-\ifxetexorluatex % If you're using XeLaTeX or LuaLaTeX
-  \usepackage{fontspec} 
-  %% You can use \setmainfont etc; I'm just using these font packages here because they provide OpenType fonts for use by XeLaTeX/LuaLaTeX anyway
-  \usepackage[p,osf,swashQ]{cochineal}
-  \usepackage[medium,bold]{cabin}
-  \usepackage[varqu,varl,scale=0.9]{zi4}
-\else % If you're using pdfLaTeX or latex
-  \usepackage[T1]{fontenc}
-  \usepackage[p,osf,swashQ]{cochineal}
-  \usepackage{cabin}
-  \usepackage[varqu,varl,scale=0.9]{zi4}
-\fi
-
-% Change the page margins if you want
-% \geometry{left=1cm,right=1cm,top=1.5cm,bottom=1.5cm}
-
-% Change the colours if you want
-% \definecolor{SwishLineColour}{HTML}{00FFFF}
-% \definecolor{MarkerColour}{HTML}{0000CC}
-
-% Change the item prefix marker if you want
-% \prefixmarker{$\diamond$}
-
-%% Photo is only shown if "fullonly" is included
-\includecomment{fullonly}
-% \excludecomment{fullonly}
-
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-
-\leftheader{%
-  {\LARGE\bfseries\sffamily Your Name Here, Ph.D.}
-
-  \makefield{\faEnvelope[regular]}{\href{mailto:example@gmail.com}{\texttt{example@gmail.com}}}
-  % fontawesome5 doesn't have the X icon so we use
-  % the simpleicons package here instead; but some 
-  % font size adjustment might be needed
-  \makefield{{\scriptsize\simpleicon{x}}}{\!\href{https://x.com/overleaf_example}{\texttt{@overleaf\_example}}}
-  \makefield{\faLinkedin}
-  {\href{http://www.linkedin.com/in/example/}{\texttt{example}}}
-
-  %% Next line
-  \makefield{\faGlobe}{\url{http://example.example.org/}}
-  % You can use a tabular here if you want to line up the fields.
+\hypersetup{
+    colorlinks=true,
+    linkcolor=royalblue,
+    urlcolor=royalblue
 }
 
-\rightheader{~}
-\begin{fullonly}
-\photo[r]{photo}
-\photoscale{0.13}
-\end{fullonly}
+\setlist[itemize]{leftmargin=1.2em}
 
-\title{Curriculum Vitae}
-
+% ----------------------------------
+% Header
+% ----------------------------------
 \begin{document}
-\makeheaders[c]
 
-\makerubric{employment}
-\makerubric{education}
+\begin{center}
+    {\Huge \bfseries Nazmus Saadat As-Saquib}\\[4pt]
+    \href{mailto:saadatsaquib@gmail.com}{\faEnvelope[regular]~saadatsaquib@gmail.com} \quad
+    \faPhone*~(+880) 1521227101 \quad
+    \faLinkedin~\href{https://linkedin.com/in/saadatsaquib}{linkedin.com/in/saadatsaquib}\\
+    \rule{0.9\textwidth}{0.4pt}
+\end{center}
 
-% If you're not a researcher nor an academic, you probably don't have any publications; delete this line.
-%% Sometimes when a section can't be nicely modelled with the \entry[]... mechanism; hack our own and use \input NOT \makerubric
-\input{publications}
+% ----------------------------------
+% Objective
+% ----------------------------------
+\section*{Objective}
+A fresh B.Sc. engineering graduate currently looking for a full-time teaching position. I would like to utilize my skills and experience as well as my passion for teaching to train and educate young minds. Moreover, I would like to work with other professionals to improve my skills as an educator, which will allow me to further contribute in the field of education.
 
-\makerubric{skills}
-\makerubric{misc}
+% ----------------------------------
+% Education
+% ----------------------------------
+\section*{Education}
+\textbf{Bangladesh University of Engineering and Technology (BUET)}, Dhaka\\
+\textit{Master of Science in Electrical and Electronic Engineering (EEE)}\\
+Currently studying
 
-\makerubric{referee}
-% \input{referee-full}
+\vspace{4pt}
+\textbf{Bangladesh University of Engineering and Technology (BUET)}, Dhaka\\
+\textit{Bachelor of Science in Electrical and Electronic Engineering (EEE)}\\
+April 2019 \hfill \textbf{CGPA: 3.78/4.00}
+
+\vspace{4pt}
+\textbf{Chittagong Govt. College}, Chittagong Education Board\\
+\textit{Higher Secondary Certificate (HSC)}\\
+August 2014 \hfill \textbf{GPA: 5.00/5.00}
+
+\vspace{4pt}
+\textbf{Chittagong Collegiate School}, Chittagong Education Board\\
+\textit{Secondary School Certificate (SSC)}\\
+August 2012 \hfill \textbf{GPA: 5.00/5.00}
+
+% ----------------------------------
+% Research Experience
+% ----------------------------------
+\section*{Research Experience}
+\textbf{Tuning of Thermal Conductivity of Monolayer Gallium Nitride Nano-ribbon: An Equilibrium Molecular Dynamics Study}\\
+Equilibrium Molecular Dynamics simulations using the Stillinger-Weber potential were deployed to compute the thermal conductivity of nanometer-sized zigzag monolayer GaN nano-ribbons (NR). The dependence of thermal transport on variation of length and width was explored. Additionally, the impact of aluminum and indium doping on the thermal conductivity of monolayer GaN-NR was investigated.
+
+% ----------------------------------
+% Projects
+% ----------------------------------
+\section*{Projects}
+\begin{itemize}
+  \item Recognition System for Hand Gesture Communication using kNN
+  \item EEG Brain Signal Controlled Wheelchair
+  \item Face Recognition System using PCA and Eigenfaces
+  \item 32-bit MIPS Processor Design
+  \item Weather Monitoring and Automated Temperature-Humidity Control System
+  \item Isolated Bangla Digit Recognition using MFCC and ANN
+  \item Design of Ku-Band S-Shaped Microstrip Patch Antenna
+  \item Design and Implementation of a 4-bit SAP Computer
+  \item Design of a Solar PV System for a Home
+  \item Electrical Services Design for a One-Storied Building
+  \item Pulse Rate Measurement Device
+  \item Automated Water Level Controller in Water Reservoirs
+  \item Boost Converter: A pSpice Simulation
+\end{itemize}
+
+% ----------------------------------
+% Technical Skills
+% ----------------------------------
+\section*{Technical Skills}
+\textbf{Programming Languages:} Python, C++, C, MATLAB, Verilog, Assembly (Intel 8086)\\
+\textbf{Simulation Software:} MATLAB, Simulink, LAMMPS, OVITO, VNL, CADENCE, PSPICE, PSAF, QUARTUS II, Proteus, HFSS, AutoCAD\\
+\textbf{Other Skills:} Machine Learning, Deep Learning, Signal Processing
+
+% ----------------------------------
+% Awards
+% ----------------------------------
+\section*{Awards}
+\begin{itemize}
+  \item \textbf{Dean’s List Award} – Awarded for exceptional academic performance at BUET.
+  \item \textbf{Merit Scholarship} – Received for outstanding results during undergraduate studies.
+  \item \textbf{HSC Board Scholarship} – Awarded by Chittagong Education Board for top academic results.
+\end{itemize}
+
+% ----------------------------------
+% References
+% ----------------------------------
+\section*{References}
+\textbf{Dr. Md. Mahmudur Rahman}\\
+Professor, Department of EEE, BUET\\
+\href{mailto:mahmudur@eee.buet.ac.bd}{mahmudur@eee.buet.ac.bd}
+
+\vspace{6pt}
+\textbf{Dr. Md. Masrur Rahman}\\
+Associate Professor, Department of EEE, BUET\\
+\href{mailto:masrur@eee.buet.ac.bd}{masrur@eee.buet.ac.bd}
 
 \end{document}

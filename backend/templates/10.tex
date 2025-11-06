@@ -1,251 +1,131 @@
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% PlushCV - One Page Two Column Resume
-% LaTeX Template
-% Version 1.0 (11/28/2021)
-%
-% Author:
-% Shubham Mazumder (http://mazumder.me)
-%
-% Hacked together from:
-% https://github.com/deedydas/Deedy-Resume
-%
-% IMPORTANT: THIS TEMPLATE NEEDS TO BE COMPILED WITH XeLaTeX
-%
-% 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% 
-% TODO:
-% 1. Figure out a smoother way for the document to flow onto the next page.
-% 3. Add more icon options 
-% 4. Fix hacky left alignment on contact line
-% 5. Remove Hacky fix for awkward extra vertical space
-% 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%
-% CHANGELOG:
-%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%
-% Known Issues:
-% 1. Overflows onto second page if any column's contents are more than the vertical limit.
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%Icons:
-%%Main: https://icons8.com/icons/carbon-copy
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[a4paper,margin=1cm]{geometry}
+\usepackage{multicol}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{parskip}
 
-\documentclass[]{plushcv}
-\usepackage{fancyhdr}
-\pagestyle{fancy}
-\fancyhf{}
+%----------------------------------------------------------
+% COLORS AND FONTS
+%----------------------------------------------------------
+\definecolor{royalblue}{RGB}{0,51,153}
+\definecolor{magenta}{RGB}{204,51,153}
+\definecolor{darkgray}{RGB}{60,60,60}
+
+\pagestyle{empty}
+\setlength{\columnsep}{1cm}
+\setlist[itemize]{leftmargin=*,itemsep=0.3em}
+
+% Section formatting
+\titleformat{\section}
+  {\large\bfseries\color{royalblue}}
+  {}{0em}{}
+
+\titleformat{\subsection}
+  {\normalsize\bfseries\color{magenta}}
+  {}{0em}{}
+
+%----------------------------------------------------------
+% BEGIN DOCUMENT
+%----------------------------------------------------------
 \begin{document}
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%
-%     TITLE NAME
-%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{center}
+    {\Huge\bfseries\color{royalblue} FIRSTNAME LASTNAME}\\[4pt]
+    \href{mailto:first.last@email.com}{first.last@email.com} \,|\, 
+    \href{tel:+1999999999}{+1 999 999 9999} \,|\, 
+    \href{https://linkedin.com/in/username}{linkedin.com/in/username} \,|\, 
+    \href{https://github.com/username}{github.com/username}
+\end{center}
 
-\namesection{Firstname}{Lastname}{Full Stack Software Engineer}{\contactline{\href{https://www.home.me}{homepage.com}}{\href{https://www.github.com/sansquoi}{sansquoi}}{\href{https://www.linkedin.com/}{li-username}}{\href{mailto:first.last@mail.com}{first.last@email.com}}{\href{tel:+1999999999}{9999999999}}}
+\vspace{1em}
 
-% \namesection{Firstname}{Lastname}{Full Stack Software Engineer}{\contactline{\href{https://www.mazumder.me}{mazumder.me}}{\href{https://www.github.com/sansquoi}{sansquoi}}{\href{https://www.linkedin.com/mazumders}{mazumders}}{\href{mailto:shubham.mazumder@gmail.com}{first.last@email.com}}{\href{tel:+1999999999}{9999999999}}}
+%----------------------------------------------------------
+% TWO COLUMN LAYOUT
+%----------------------------------------------------------
+\begin{multicols}{2}
+\raggedright
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%
-%     COLUMN ONE
-%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%----------------------------------------------------------
+% LEFT COLUMN
+%----------------------------------------------------------
+\section*{Experience}
 
-\begin{minipage}[t]{0.70\textwidth} 
+\textbf{Weyland Yutani Industries} \hfill \textit{May 2021 – Present}\\
+\textcolor{magenta}{Program Manager, Tokyo, Japan}
+\begin{itemize}
+    \item Led multi-disciplinary teams to deliver 5+ major tech projects on schedule.
+    \item Improved client satisfaction from 88\% to 99.9\% through effective communication.
+    \item Reduced operational costs by 12\% via process optimization.
+\end{itemize}
 
+\textbf{Tessier-Ashpoole S.A.} \hfill \textit{Jul 2016 – Mar 2019}\\
+\textcolor{magenta}{Software Developer, Villa Straylight, U.S.}
+\begin{itemize}
+    \item Developed scalable REST APIs improving performance by 30\%.
+    \item Integrated cloud-based systems for data processing.
+    \item Mentored junior developers and reviewed over 200 PRs.
+\end{itemize}
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%     EXPERIENCE
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\textbf{LexCorp} \hfill \textit{Jul 2012 – Mar 2016}\\
+\textcolor{magenta}{Software Developer, Metropolis}
+\begin{itemize}
+    \item Created internal tools that saved 20\% of engineering time.
+    \item Implemented automation pipelines for builds and deployment.
+\end{itemize}
 
-\section{Experience}
-\runsubsection{Weyland Yutani Industries}
-\descript{| Program Manager}
-\location{May 2021 – Current | Tokyo, Japan}
-\vspace{\topsep} % Hacky fix for awkward extra vertical space
-\begin{tightemize}
-\sectionsep
-\item Lorem ipsum dolor sit amet, consectetur adipiscing elit. Proin ullamcorper venenatis nisi at suscipit. Vestibulum vel odio in diam ultrices posuere. Cras suscipit faucibus ullamcorper.
-\item Ut consectetur tempus tincidunt. Curabitur in felis et leo elementum facilisis at non metus. Vestibulum et ullamcorper augue, nec accumsan tellus. \item Cras posuere in nunc vel sagittis. Aliquam aliquet non orci id pellentesque. Nulla gravida lectus quis tellus rhoncus rhoncus.  
-\end{tightemize}
-\sectionsep
+\section*{Projects}
+\textbf{Chess Engine (C++)}
+\begin{itemize}
+    \item Built a heuristic-based chess engine using minimax and alpha-beta pruning.
+\end{itemize}
 
-\runsubsection{Tessier-Ashpoole S.A.}
-\descript{| Software Developer }
-\location{July 2016 – March 2019 | Villa Straylight, U.S.}
-\begin{tightemize}
-\sectionsep
-\item Lorem ipsum dolor sit amet, consectetur adipiscing elit. Proin ullamcorper venenatis nisi at suscipit. Vestibulum vel odio in diam ultrices posuere. Cras suscipit faucibus ullamcorper.
-\item Ut consectetur tempus tincidunt. Curabitur in felis et leo elementum facilisis at non metus. Vestibulum et ullamcorper augue, nec accumsan tellus.
-\item Cras posuere in nunc vel sagittis. Aliquam aliquet non orci id pellentesque. Nulla gravida lectus quis tellus rhoncus rhoncus.
-\end{tightemize}
-\sectionsep
+\textbf{Speech-enabled Chatbot (C\#, MS Bot Framework)}
+\begin{itemize}
+    \item Designed conversational AI for automated customer support.
+\end{itemize}
 
-\runsubsection{LexCorp}
-\descript{| Software Developer }
-\location{July 2012 – March 2016 | Metropolis}
-\begin{tightemize}
-\sectionsep
-\item Lorem ipsum dolor sit amet, consectetur adipiscing elit. Proin ullamcorper venenatis nisi at suscipit. Vestibulum vel odio in diam ultrices posuere. Cras suscipit faucibus ullamcorper.
-\item Ut consectetur tempus tincidunt. Curabitur in felis et leo elementum facilisis at non metus. Vestibulum et ullamcorper augue, nec accumsan tellus.
- rhoncus.
-\end{tightemize}
-\sectionsep
+%----------------------------------------------------------
+% RIGHT COLUMN
+%----------------------------------------------------------
+\columnbreak
 
+\section*{Skills}
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%     Projects
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection*{Programming}
+\textbf{Proficient:} C\#, JavaScript, Python, SQL, HTML/CSS\\
+\textbf{Experienced:} LaTeX, C++\\
+\textbf{Familiar:} Java, Shell, Assembly
 
-\section{Projects}
+\subsection*{Frameworks \& Tools}
+React, Node.js, Git, Docker, Webpack, Heroku
 
-\runsubsection{Chess Engine}
-\descript{| C++}
-\location{2018}
-\begin{tightemize}
-\item Lorem ipsum dolor sit amet, consectetur adipiscing elit. Proin ullamcorper venenatis nisi at suscipit. Vestibulum vel odio in diam ultrices posuere. Cras suscipit faucibus ullamcorper.
-\item Lorem ipsum dolor sit amet, consectetur adipiscing elit. Proin ullamcorper venenatis nisi at suscipit.
-\end{tightemize}
-\sectionsep
+\section*{Education}
 
-\runsubsection{Speech-enabled Chatbot}
-\descript{| C\#, Microsoft Bot Framework}
-\location{2018}
-\begin{tightemize}
-\item Lorem ipsum dolor sit amet, consectetur adipiscing elit. Proin ullamcorper venenatis nisi at suscipit. Vestibulum vel odio in diam ultrices posuere. Cras suscipit faucibus ullamcorper. 
-\item Lorem ipsum dolor sit amet, consectetur adipiscing elit. Proin ullamcorper venenatis nisi at suscipit.
-\end{tightemize}
-\sectionsep
+\textbf{University of Utah}\\
+Master’s in Computer Science\\
+\textit{Jan 2021 – Present | SLC, Utah}\\
+GPA: 3.85 / 4.0
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%     AWARDS
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\vspace{0.8em}
 
-% \section{Awards} 
-% \begin{tabular}{rll}
-% 2020	     & Finalist & Lorem Ipsum\\
-% 2018	     & $2^{nd}$ & Dolor Sit Amet\\
-% 2015	     & Finalist  & Cras posuere\\
-% \\
-% \end{tabular}
-% \sectionsep
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%
-%     COLUMN TWO
-%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\textbf{University of Oregon}\\
+Bachelor’s in Computer Science and Engineering\\
+\textit{May 2016 | Corvallis, OR}\\
+GPA: 3.7 / 4.0
 
-\end{minipage} 
-\hfill
-\begin{minipage}[t]{0.25\textwidth} 
+\section*{References}
+\textbf{John Doe} — Senior Developer, Tyrell Corp\\
+\href{mailto:john.doe@email.com}{john.doe@email.com} | +1 999 999 9999
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%     SKILLS
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\vspace{0.4em}
+\textbf{Jane Doe} — Lead Engineer, Primatech\\
+\href{mailto:jane.doe@email.com}{jane.doe@email.com} | +1 999 999 9999
 
-\section{Skills}
-\subsection{Programming}
-\sectionsep
-\location{Proficient:}
-C\# \textbullet{} C \textbullet{} JavaScript \textbullet{} Python    \\ SQL \textbullet{} CSS \textbullet{} HTML \textbullet{} \\
-\sectionsep
-\location{Experienced:}
-Python \textbullet{} \LaTeX\ \textbullet{}  C++  \\
-\sectionsep
-\location{Familiar:}
-Java \textbullet{}  Shell \textbullet{} Assembly \\
-\sectionsep
-\sectionsep
-\subsection{Libraries/Frameworks}
-\sectionsep
-jQuery \textbullet{} Node.js \textbullet{} Jekyll \textbullet{} React \\
-\sectionsep
-\sectionsep
-\subsection{Tools/Platforms}
-\sectionsep
-Git \textbullet{} Gulp \textbullet{} Webpack \textbullet{} Heroku    \\ Wordpress \textbullet{} Docker \\
+\end{multicols}
 
-\sectionsep
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%     EDUCATION
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-\section{Education} 
-\subsection{University of Utah}
-\descript{Master's in Computer Science}
-\location{Jan 2021 - Present | SLC, Utah}
-School of Computing \\
-\location{ Cum. GPA: 3.85 / 4.0 }
-
-\sectionsep
-\subsection{University of Oregon}
-\descript{Bachelor's in Computer Science 
-\\and Engineering}
-\location{May 2016 | Corvallis, OR}
-School of Computing \\
-\location{ Cum. GPA: 3.7 / 4.0 }
-\sectionsep
-
-% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% %     REFERENCES
-% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-\section{References} 
-\href{https://www.linkedin.com/company/john-doe/}{\textbf{John Doe}, Senior Software Developer, Tyrell Corp}
-\begingroup
-\setbox0=\hbox{
-\includegraphics[scale=0.1,trim={0 1cm 0cm 0cm}]{icons/main/mail.png}\hspace{0.3cm} john.doe@email.com
-}
-\parbox{\wd0}{\box0}
-\endgroup
-\begingroup
-\setbox0=\hbox{
-\includegraphics[scale=0.1,trim={0 1.25cm -0.4cm 0cm}]{icons/main/phone.png}\hspace{0.3cm}+19999999999
-}
-\parbox{\wd0}{\box0}\endgroup
-\\
-\sectionsep
-\href{https://www.linkedin.com/company/john-doe/}{\textbf{Jane Doe}}, Senior Software Developer, Primatech 
-\\
-\begingroup
-\setbox0=\hbox{
-\includegraphics[scale=0.1,trim={0 1cm 0cm 0cm}]{icons/main/mail.png}\hspace{0.3cm} jane.doe@email.com
-}
-\parbox{\wd0}{\box0}
-\endgroup
-\begingroup
-\setbox0=\hbox{
-\includegraphics[scale=0.1,trim={0 1.25cm -0.4cm 0cm}]{icons/main/phone.png}\hspace{0.3cm}+19999999999
-}
-\parbox{\wd0}{\box0}\endgroup
-\\
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%     COURSEWORK
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-% \section{Coursework}
-
-% \subsection{Graduate}
-% Graduate Algorithms \textbullet{}\\ 
-% Advanced Computer Architecture \textbullet{}\\ 
-% Operating Systems \textbullet{}\\ 
-% Artificial Intelligence \textbullet{}\\
-% Visualization For Scientific Data \\
-% \sectionsep
-
-% \subsection{Undergraduate}
-
-% Database Management Systems \textbullet{}\\
-% Object Oriented Analysis and Design \textbullet{}\\
-% Artificial Intelligence and Expert Systems \textbullet{}\\
-% Scripting Languages and Web Tech \textbullet{}\\
-% Software Engineering \\
-
-\end{minipage} 
-\end{document}  \documentclass[]{article}
+\end{document}
