@@ -1,0 +1,203 @@
+#TOPIC: Data Structures & Algorithms
+
+#DIFFICULTY: Easy
+What is a stack, and how does it work?
+---
+Implement FizzBuzz (replace multiples of 3/5 with 'Fizz'/'Buzz').
+---
+Find the largest element in an array.
+---
+Determine if a string has valid parentheses.
+---
+Find the longest common prefix among a list of strings.
+---
+
+#DIFFICULTY: Medium
+Design and implement a queue using stacks.
+---
+Find the longest substring without repeating characters.
+---
+Merge k sorted lists into one sorted list.
+---
+Merge intervals: combine overlapping intervals into a single interval.
+---
+Find the kth largest element in an unsorted array.
+---
+
+#DIFFICULTY: Hard
+Implement a Least Recently Used (LRU) cache.
+---
+Find the k most frequent elements in an array.
+---
+Find the maximum profit from buying and selling stock with at most k transactions.
+---
+Find the largest rectangle in a binary matrix.
+---
+Solve the word ladder problem (shortest transformation sequence).
+
+
+#TOPIC: System Design
+
+#DIFFICULTY: Medium
+Design a scalable image storage service like iCloud Photos.
+---
+Design a global chat messaging platform.
+---
+Design the backend for a collaborative document editor.
+---
+
+#DIFFICULTY: Hard
+Design an Apple Music streaming service (focus on latency, fault tolerance, search).
+---
+Architect a live event notification system for millions of users.
+---
+Design a file versioning system for distributed teams.
+
+
+#TOPIC: Frameworks, Languages, and Technologies
+
+#DIFFICULTY: Easy
+What is Swift and why is it preferred for Apple development?
+---
+Describe the role of Objective-C in Apple's ecosystem.
+---
+What is Xcode, and why is it important for iOS/Mac app development?
+---
+
+#DIFFICULTY: Medium
+How does the Foundation Models framework enable on-device intelligence features?
+---
+Explain the use of App Intents for integrating with Siri and Spotlight.
+---
+Describe the purpose and features of Metal 4 for graphics and machine learning.
+---
+
+#DIFFICULTY: Hard
+Implement generative AI using the Foundation Models framework in a privacy-centric app.
+---
+Architect an app with Apple Intelligence for real-time content creation and automation.
+---
+Design a high-performance game using Metal 4 and Core ML for next-gen Apple silicon.
+
+
+#TOPIC: Mobile Development Trends & Skills
+
+#DIFFICULTY: Medium
+How does ARKit enable augmented reality experiences in educational and retail apps?
+---
+How can iOS developers leverage Core ML and Create ML for personalized app experiences?
+---
+
+#DIFFICULTY: Hard
+Design an IoT-enabled health platform integrating Apple Health and remote wearables.
+---
+Architect an app for real-time AR/VR streaming using 5G and edge computing.
+
+
+#TOPIC: Cloud & Infrastructure
+
+#DIFFICULTY: Easy
+What is a hypervisor and why is it needed for virtualization?
+---
+What are the benefits of containerization for Apple cloud services?
+---
+
+#DIFFICULTY: Medium
+Explain the use of Kubernetes, Docker, and Terraform in Apple’s cloud infrastructure.
+---
+How do content delivery networks (CDNs) like Akamai and Cloudflare support Apple services?
+---
+
+#DIFFICULTY: Hard
+Design a multi-region failover architecture for Apple services spanning own data centers and third-party clouds.
+---
+How does Apple maintain consistency and availability across distributed databases?
+
+
+#TOPIC: Machine Learning & Artificial Intelligence
+
+#DIFFICULTY: Easy
+What is Core ML and how is it used in Apple apps?
+---
+
+#DIFFICULTY: Medium
+Explain how developers integrate LLMs, such as ChatGPT, with Xcode for assisted coding and documentation.
+---
+
+#DIFFICULTY: Hard
+Design a privacy-preserving AI-powered app for on-device natural language processing using Apple Intelligence.
+
+
+#TOPIC: Hardware & Embedded Systems
+
+#DIFFICULTY: Medium
+What role does C++ play in Apple’s custom silicon development?
+---
+
+#DIFFICULTY: Hard
+Design firmware for Apple Watch using real-time operating systems.
+
+
+#TOPIC: Security & Privacy
+
+#DIFFICULTY: Easy
+What is authentication versus authorization in mobile app development?
+---
+What is HTTPS and how does it protect user data?
+---
+
+#DIFFICULTY: Medium
+Describe how Apple’s sandboxing works for security and resource isolation in macOS.
+---
+
+#DIFFICULTY: Hard
+Design a robust key management system for Apple Pay and end-to-end encrypted messaging across Apple devices.
+
+
+#TOPIC: Networking
+
+#DIFFICULTY: Easy
+What is a socket and how does it work on iOS/macOS?
+---
+
+#DIFFICULTY: Medium
+How does Apple optimize latency and throughput for global services?
+---
+
+#DIFFICULTY: Hard
+Design a scalable CDN architecture for global App Store and iCloud delivery over 5G.
+
+
+#TOPIC: Project Management & Collaboration
+
+#DIFFICULTY: Medium
+How are Jira, Trello, and Apple’s internal tools used for cross-functional project management?
+
+
+#TOPIC: Behavioral & Leadership
+
+#Relevant for All Levels
+Describe a time when you led a project or a team at Apple.
+---
+How do you inspire innovation within your team?
+---
+Describe a situation where you faced a major obstacle. How did you overcome it?
+---
+How do you handle conflicts within a team?
+---
+How do you prioritize tasks when facing tight deadlines?
+
+
+#TOPIC: Additional Emerging Technologies
+
+#DIFFICULTY: Medium
+Leverage SwiftUI for declarative UI development and seamless experience across Apple platforms.
+---
+What are the advantages of using GraphQL APIs in Apple’s mobile ecosystems?
+---
+
+#DIFFICULTY: Hard
+Design a spatial computing solution using Apple Vision Pro and ARKit for immersive workflows.
+---
+Develop and deploy a privacy-centric AI assistant leveraging Apple Intelligence and LLM integration.
+---

@@ -29,7 +29,7 @@ class InterviewAgentState(TypedDict):
     interview_focus: Literal["all", "proficient", "gaps"]
     
     # This list will be loaded from our user profile in Postgres
-    skill_list: List[str] 
+    skill_list: List[str] #current skills
     
     # This list will be built up during the interview
     evaluation_report: Annotated[list, operator.add]
@@ -187,8 +187,14 @@ workflow.add_node("evaluate_answer", evaluate_answer_node)
 workflow.add_node("update_session_state", lambda state: {"covered_questions": [state["messages"][-2].content]}) # Simple updater
 workflow.add_node("synthesize_and_update", synthesize_and_update_node)
 
+
+
 # Add the "wait for user" interrupt
 workflow.add_node("await_user_answer", lambda state: state)
+
+
+
+
 
 # Add the edges
 workflow.set_entry_point("start_interview")
