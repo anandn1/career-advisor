@@ -389,7 +389,7 @@ from settings import (
     llm,
     embedding_function,
     CHROMA_PERSIST_DIR,
-    DB_URI,
+    DB_URL,
     COHERE_API_KEY
 )
 
