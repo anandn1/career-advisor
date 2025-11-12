@@ -3,4 +3,6 @@ chroma_db_market/
 chroma_db_interview_questions/
 
 # Ignore all .env files
-**/.env
+**/.env\
+.venv/
+venv/
