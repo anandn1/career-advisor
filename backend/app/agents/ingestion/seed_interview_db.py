@@ -1,25 +1,38 @@
 import os
 import shutil
 import re
+import sys
 from pathlib import Path
 from typing import List, Dict, Any, Generator
 from langchain_core.documents import Document
 from langchain_chroma import Chroma
 
 # --- Import shared settings ---
-import sys
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
-
+# Use the script's location to determine project root
 try:
+    # Get the directory where this script is located
+    SCRIPT_DIR = Path(__file__).resolve().parent 
+    # Go up two levels (e.g., from .../app/agents/ingestion to .../app)
+    PROJECT_ROOT = (SCRIPT_DIR / ".." / "..").resolve()
+    sys.path.append(str(PROJECT_ROOT))
+    
     from agents.settings import embedding_function
+    
 except ImportError:
-    print("❌ Error: Could not import embedding_function from app.core.settings.")
+    print("❌ Error: Could not import embedding_function from agents.settings.")
     print("   Ensure your project structure and PYTHONPATH are correct.")
+    print(f"   Based on this script, tried to add: {PROJECT_ROOT}")
+    sys.exit(1)
+except NameError:
+    # Handle case where __file__ is not defined (e.g., in a REPL)
+    print("❌ Error: Could not determine script directory. Are you running this in a REPL?")
     sys.exit(1)
 
+
 # --- Configuration ---
-DATA_SOURCE_DIR = Path("/mnt/162B47977B82AA01/Agentic AI project/backend/app/agents/ingestion/interview_rag_data")
-INTERVIEW_CHROMA_DIR = Path("./chroma_db_interview_questions")
+# Use paths relative to the script's directory
+DATA_SOURCE_DIR = SCRIPT_DIR / "interview_rag_data"
+INTERVIEW_CHROMA_DIR = SCRIPT_DIR / "chroma_db_interview_questions"
 QUESTION_DELIMITER = "\n---\n"
 
 
@@ -33,7 +46,7 @@ class InterviewQuestionParser:
     ---
     Question 2
     
-    #DIFFICULTY: Medium   # Topic persists from above
+    #DIFFICULTY: Medium    # Topic persists from above
     Question 3
     ---
     Question 4
@@ -49,7 +62,7 @@ class InterviewQuestionParser:
         
     def _get_default_company(self) -> str:
         """Extract default company from filename."""
-        return self.file_path.stem.lower()  # 'generic', 'google', 'amazon', etc.
+        return self.file_path.stem.lower()   # 'generic', 'google', 'amazon', etc.
     
     def _validate_metadata(self, meta: Dict[str, str], section_idx: int) -> bool:
         """Validate required metadata fields."""
@@ -79,8 +92,7 @@ class InterviewQuestionParser:
             stripped = line.strip()
             # Skip lines that start with # but aren't valid metadata
             if stripped.startswith('#') and not self.METADATA_PATTERN.match(stripped):
-                if stripped.startswith('#Relevant'):
-                    print(f"ℹ️  Info [L{line_num}]: Ignoring comment: {stripped}")
+                
                 continue
             filtered.append(line)
         
@@ -157,15 +169,15 @@ class InterviewQuestionParser:
 
 def load_documents_from_files() -> List[Document]:
     """Load all interview question documents from .txt files."""
-    print(f"📂 Loading documents from: {DATA_SOURCE_DIR}")
+    
     
     if not DATA_SOURCE_DIR.exists():
-        print(f"❌ Directory not found: {DATA_SOURCE_DIR}")
+        print(f" Directory not found: {DATA_SOURCE_DIR}")
         return []
     
     file_paths = list(DATA_SOURCE_DIR.glob("*.txt"))
     if not file_paths:
-        print(f"⚠️  No .txt files found in {DATA_SOURCE_DIR}")
+        print(f"  No .txt files found in {DATA_SOURCE_DIR}")
         return []
     
     all_documents = []
@@ -174,21 +186,21 @@ def load_documents_from_files() -> List[Document]:
         documents = list(parser.parse())
         all_documents.extend(documents)
     
-    print(f"\n✅ Total documents loaded: {len(all_documents)}")
+    print(f"\n Total documents loaded: {len(all_documents)}")
     return all_documents
 
 
 def seed_database(dry_run: bool = False) -> None:
     """Clear and re-populate the vector store."""
     if not dry_run and INTERVIEW_CHROMA_DIR.exists():
-        print(f"🗑️  Clearing existing database at {INTERVIEW_CHROMA_DIR}...")
+        print(f" Clearing existing database at {INTERVIEW_CHROMA_DIR}...")
         shutil.rmtree(INTERVIEW_CHROMA_DIR)
     
     print("📄 Loading new documents from files...")
     documents_to_add = load_documents_from_files()
     
     if not documents_to_add:
-        print("❌ No documents loaded. Seeding process stopped.")
+        print(" No documents loaded. Seeding process stopped.")
         return
     
     if dry_run:
@@ -199,7 +211,7 @@ def seed_database(dry_run: bool = False) -> None:
             print(f"  ... and {len(documents_to_add) - 5} more")
         return
     
-    print("💾 Creating new vector store and adding documents...")
+    print(" Creating new vector store and adding documents...")
     db = Chroma.from_documents(
         documents=documents_to_add,
         embedding=embedding_function,
@@ -207,22 +219,22 @@ def seed_database(dry_run: bool = False) -> None:
     )
     
     print(f"\n🎉 Successfully seeded {len(documents_to_add)} documents!")
-    print(f"💾 Database saved to {INTERVIEW_CHROMA_DIR}")
+    print(f" Database saved to {INTERVIEW_CHROMA_DIR}")
     
     # Verification
     count = db._collection.count()
-    print(f"🔍 Verification: {count} documents in ChromaDB")
+    print(f" Verification: {count} documents in ChromaDB")
     
     # Test similarity search
-    print("\n🧪 Testing similarity search...")
+    print("\n Testing similarity search...")
     results = db.similarity_search("design a system for", k=3)
     for i, doc in enumerate(results):
-        print(f"   {i+1}. {doc.metadata['topic']} | {doc.metadata['difficulty']}")
+        print(f"    {i+1}. {doc.metadata['topic']} | {doc.metadata['difficulty']}")
 
 
 def verify_parsing():
     """Debug helper: Parse and display documents without seeding."""
-    print("🔍 VERIFICATION MODE - Parsing documents only\n")
+    print(" VERIFICATION MODE - Parsing documents only\n")
     docs = load_documents_from_files()
     
     if not docs:
@@ -233,7 +245,7 @@ def verify_parsing():
     file_counter = Counter([doc.metadata['source_file'] for doc in docs])
     print("\n📊 Summary by file:")
     for fname, count in file_counter.items():
-        print(f"   {fname}: {count} questions")
+        print(f"    {fname}: {count} questions")
     
     # Sample documents
     print("\n📄 Sample parsed documents:")
@@ -251,6 +263,7 @@ if __name__ == "__main__":
     
     parser = argparse.ArgumentParser(description="Seed interview question vector database")
     parser.add_argument("--dry-run", action="store_true", help="Parse and validate without writing to DB")
+    # This is the corrected line:
     parser.add_argument("--verify", action="store_true", help="Verify document parsing only")
     
     args = parser.parse_args()
@@ -258,8 +271,4 @@ if __name__ == "__main__":
     if args.verify:
         verify_parsing()
     else:
-<<<<<<< HEAD
         seed_database(dry_run=args.dry_run)
-=======
-        seed_database(dry_run=args.dry_run)
->>>>>>> d9bce1658a87c4790c80de71a1f8cfcbeeb7d13d
