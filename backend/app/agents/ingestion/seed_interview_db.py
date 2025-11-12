@@ -258,4 +258,8 @@ if __name__ == "__main__":
     if args.verify:
         verify_parsing()
     else:
+<<<<<<< HEAD
         seed_database(dry_run=args.dry_run)
+=======
+        seed_database(dry_run=args.dry_run)
+>>>>>>> d9bce1658a87c4790c80de71a1f8cfcbeeb7d13d

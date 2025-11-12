@@ -1,0 +1,220 @@
+#TOPIC: Data Structures & Algorithms
+
+#DIFFICULTY: Easy
+What is a hash map, and how is it used in search and retrieval?
+---
+Reverse a string or array in place.
+---
+Determine if an array contains duplicates.
+---
+Find the first non-repeating character in a string.
+---
+
+#DIFFICULTY: Medium
+Find the longest substring with k unique characters.
+---
+Implement a queue using stacks.
+---
+Merge two sorted lists into one sorted list.
+---
+Find all pairs in an array that sum to a given target value.
+---
+
+#DIFFICULTY: Hard
+Design an LFU (Least Frequently Used) cache and explain its relevance in large-scale news feed ranking.
+---
+Find all triplets in an array that sum to zero.
+---
+Design a data structure to track top K trending hashtags in real time.
+---
+Edit distance between two strings for similarity search.
+
+#TOPIC: System Design
+
+#DIFFICULTY: Medium
+Design a scalable group messaging system like Messenger.
+---
+Design a real-time notification service for Meta apps.
+---
+Design a recommendation engine for content feeds.
+---
+
+#DIFFICULTY: Hard
+Design an edge cache and CDN for global video and image delivery on Meta platforms.
+---
+Architect Meta’s Graph API backend for high-throughput access.
+---
+Design a privacy-first ads delivery platform supporting billions of requests.
+---
+Build a real-time analytics infrastructure for Facebook Live and Reels.
+
+#TOPIC: Machine Learning / AI
+
+#DIFFICULTY: Medium
+How does Meta use ML models for feed ranking and ad targeting?
+---
+Design a candidate generation workflow for large-scale content recommendations.
+---
+Explain how Meta manages model retraining, evaluation, and deployment at scale.
+---
+
+#DIFFICULTY: Hard
+Architect a real-time anomaly detection system for harmful content.
+---
+How would you deploy low-latency inference for billions of users?
+---
+Discuss the design of reinforcement learning systems (ReAgent) for optimizing engagement.
+---
+Deploy generative AI systems (e.g., Llama, MUSE) for user-generated content.
+
+#TOPIC: Frameworks, Tools, & Libraries
+
+#DIFFICULTY: Medium
+Describe how PyTorch (Meta AI) is used for rapid ML prototyping and research.
+---
+Explain Metaflow’s role in orchestrating multi-stage ML workflows across teams.​
+---
+Discuss the use of AI Lab for fast A/B testing and metric validation in production ML at Meta.​
+---
+What are the benefits of ReAgent for reinforcement learning and large-scale reasoning tasks?
+---
+
+#DIFFICULTY: Hard
+Compare model-agnostic meta-learning frameworks (MAML, PHYRE) and their scalability for adapting to new tasks.​
+---
+How does Meta leverage generative models (Llama, Seamless) for cross-lingual translation and content moderation?​
+---
+Design a distributed tracing solution for ML workflows using Metaflow and observability tools.
+
+#TOPIC: Databases
+
+#DIFFICULTY: Easy
+What is a distributed NoSQL database, and why does Meta rely on it for social graphs?
+---
+Define ACID properties in context of scaling Facebook comments.
+---
+
+#DIFFICULTY: Medium
+Describe sharding strategies for user timeline data.
+---
+Explain query optimization for news feed ranking.
+---
+
+#DIFFICULTY: Hard
+Design a globally consistent, low-latency database for messaging across continents.
+---
+How would you handle real-time replication for billions of users?
+---
+Architect a backup and disaster recovery process supporting Meta-scale traffic.
+
+#TOPIC: Cloud, Infrastructure, & DevOps
+
+#DIFFICULTY: Medium
+Describe Meta's approach to container orchestration for massive deployments.
+---
+How does Meta use infrastructure as code (Terraform, Chef, proprietary tools) for rapid rollout?
+---
+
+#DIFFICULTY: Hard
+Design a multi-region failover strategy for Facebook and Instagram.
+---
+Build an observability stack for real-time fault detection at Meta scale.
+
+#TOPIC: Security & Privacy
+
+#DIFFICULTY: Easy
+What is the difference between authentication and authorization in Meta apps?
+---
+Explain symmetric vs. asymmetric encryption for messaging privacy.
+---
+
+#DIFFICULTY: Medium
+Design an API rate limiter to protect against brute force attacks.
+---
+How does Meta safeguard user data against content scraping?
+---
+
+#DIFFICULTY: Hard
+Architect an encrypted messaging protocol for Messenger/WhatsApp.
+---
+Secure multi-party computation for confidential ad metrics.​
+
+#TOPIC: Networking
+
+#DIFFICULTY: Easy
+What is a CDN and why are edge locations critical for Meta’s media sharing?
+---
+Contrast TCP and UDP for real-time chat and video streaming.
+---
+
+#DIFFICULTY: Medium
+Design an API gateway for Facebook’s microservices backend.
+---
+Describe latency mitigation techniques for Messenger.
+---
+
+#DIFFICULTY: Hard
+Architect a load-balanced real-time video streaming solution for Facebook Live.
+
+#TOPIC: Coding (All Languages)
+
+#DIFFICULTY: Easy
+Find the largest word in a comment by deleting some characters from a string.
+---
+Add binary numbers given as strings.
+---
+
+#DIFFICULTY: Medium
+Merge intervals in event scheduling.
+---
+Minimum Area Rectangle in posted images.
+---
+
+#DIFFICULTY: Hard
+Celebrity Problem: Identify the most followed user in a graph.
+---
+Implement fair distribution of notifications to minimize missed events.
+
+#TOPIC: Behavioral & Leadership
+
+#Relevant for All Levels
+Why Meta? What inspires you about the company’s mission?
+---
+Describe a time you solved a major site reliability issue affecting millions.
+---
+How do you drive innovation with responsibility and compliance?
+---
+Give an example of fostering collaboration, diversity, or product impact at scale.
+
+#TOPIC: Mobile & Web Development
+
+#DIFFICULTY: Medium
+Describe the role of React (Meta) for high-performant, scalable web apps.
+---
+How does React Native enable cross-platform development for Meta’s apps?
+---
+
+#DIFFICULTY: Hard
+Architect an offline-first Messenger app using GraphQL and local caching.
+
+#TOPIC: Research & Emerging Technologies
+
+#DIFFICULTY: Medium
+What are the benefits of using MUSE for cross-lingual word embeddings in Meta search?​
+---
+Describe the purpose and workflow of training large models using Metaflow.​
+---
+
+#DIFFICULTY: Hard
+How does Meta leverage simulation frameworks like Galactic and PHYRE for robotics and physical reasoning?​
+---
+Design data pipelines and benchmarks for generative AI model training.
+
+#TOPIC: Meta-Learning & AI Foundations
+
+#DIFFICULTY: Medium
+Explain model-agnostic meta-learning (MAML) and its strengths in adaptability.​
+---
+
+#DIFFICULTY: Hard
+Implement a memory-augmented neural network (MANN) for rapid personalization at Meta scale.
