@@ -5,20 +5,20 @@ import operator
 import random
 from datetime import datetime
 import re
-import uuid # <-- IMPORTED
+import uuid 
 from langgraph.types import Command, interrupt
-from langchain_core.messages import ( # <-- CLEANED UP IMPORTS
+from langchain_core.messages import ( 
     BaseMessage, 
     SystemMessage, 
     HumanMessage, 
     AIMessage
 )
 
-# --- LangGraph v1.0 Imports ---
+
 from langgraph.graph import StateGraph, START, END, MessagesState
 from langgraph.checkpoint.postgres import PostgresSaver
 
-# --- LangChain Imports ---
+
 from langchain_cohere import CohereRerank
 from langchain_chroma import Chroma
 from langchain_core.prompts import PromptTemplate
@@ -47,16 +47,21 @@ class InterviewAgentState(MessagesState):
     interview_focus: Literal["all", "proficient", "gaps"]
     company_focus: str
     topic_list: List[str]
-    evaluation_report: Annotated[List[dict], operator.add]
-    covered_questions: Annotated[List[str], operator.add]
+    
+    # --- MODIFIED: REMOVED operator.add ---
+    evaluation_report: List[dict]
+    covered_questions: List[str]
+    # --- END MODIFICATION ---
+    
     current_question_id: str
-    current_question_topic: str  # NEW: Track current question's topic
-    current_question_difficulty: str  # NEW: Track current question's difficulty
+    current_question_topic: str  
+    current_question_difficulty: str  
     start_time: datetime
     question_count: int
-    topic_performance: Dict[str, List[dict]]  # NEW: Track performance per topic
+    topic_performance: Dict[str, List[dict]]  
     current_difficulty_per_topic: Dict[str, List[str]]
-# --- 2. Direct Dependency Initialization (CORRECTED v1.0 API) ---
+
+
 print("\n" + "="*70)
 print("INITIALIZING LANGGRAPH v1.0 DEPENDENCIES")
 print("="*70)
@@ -112,7 +117,41 @@ SUMMARY_PROMPT = PromptTemplate(
 Provide a concise summary."""
 )
 
+# --- 3. LLM Prompts ---
+# ... (EVALUATION_PROMPT and SUMMARY_PROMPT) ...
 
+ACTION_CHOICE_PROMPT = PromptTemplate(
+    input_variables=["question", "answer", "grade"],
+    template="""You are an interview agent's routing logic.
+
+The user was asked: {question}
+The user answered: {answer}
+The evaluation was: {grade}
+
+Based on this evaluation, should you:
+1. Ask a probing follow-up question (because the answer was incomplete, vague, or 'moderate').
+2. Move on to a completely new question (because the answer was 'excellent', 'good', or 'bad' and unsalvageable).
+
+Ask follow up question strictly when its necessary, avoid unnecessary follow up questions.
+
+Important : Respond with ONLY the word "FOLLOW_UP" or "NEW_QUESTION"."""
+)
+
+FOLLOW_UP_PROMPT = PromptTemplate(
+    input_variables=["question", "answer", "grade"],
+    template="""You are a technical interviewer.
+
+Original Question: {question}
+Candidate's Answer: {answer}
+Your internal evaluation: {grade}
+
+Your goal is to probe deeper. Ask a SINGLE, concise follow-up question based on their answer.
+Do NOT say "Good answer" or "Okay". Just ask the follow-up question.
+
+Example: If the answer was about 'sharding', a good follow-up is 'How would you handle a hot shard?'
+
+Your follow-up question:"""
+)
 
 # --- Helper function for difficulty transitions ---
 def get_next_difficulty_state(current_diffs: List[str], upgrade: bool = False, downgrade: bool = False) -> List[str]:
@@ -121,9 +160,7 @@ def get_next_difficulty_state(current_diffs: List[str], upgrade: bool = False, d
     current_set = set(current_diffs)
 
     if upgrade:
-        # --- Upgrade Logic ---
-        # Called when user aces 2 easy questions.
-        # The new state should be ["hard"].
+        
         if current_set != {"hard"}:
             return ["hard", "medium"]
         else:
@@ -139,11 +176,9 @@ def get_next_difficulty_state(current_diffs: List[str], upgrade: bool = False, d
             return current_diffs # Already at ["easy"], no change
         
     return current_diffs
-# ------------------------------------------------------------
 
 
-# --- 4. Node Functions ---
-# REPLACE the entire start_interview_node function with:
+
 
 
 
@@ -156,11 +191,7 @@ def start_interview_node(state: InterviewAgentState) -> dict:
     if not state.get("topic_list"):
         raise ValueError("topic_list is required")
     
-    # --- MODIFIED: Removed initial difficulty logic based on 'focus' ---
-    # The generate_question_node will default to ["easy", "medium", "hard"]
-    # if a topic is not found in the map.
     
-    # Initialize per-topic difficulty settings (as empty)
     current_difficulty_per_topic = {}
     
     # Show initial difficulty settings
@@ -377,6 +408,43 @@ def generate_question_node(state: InterviewAgentState) -> dict:
         "question_count": state.get("question_count", 0) + 1,
         "current_difficulty_per_topic": updated_difficulty_map # Pass the updated map
     }
+
+def ask_follow_up_node(state: InterviewAgentState) -> dict:
+    """
+    Generates an LLM-based follow-up question instead of using RAG.
+    This does NOT count as a new question.
+    """
+    print("\n--- Node: ask_follow_up ---")
+    
+    # Get the details from the last evaluation
+    last_eval = state.get("evaluation_report", [])[-1]
+    question = last_eval["question"]
+    answer = last_eval["answer"]
+    grade = last_eval["evaluation"]
+    
+    # Generate the follow-up question
+    try:
+        prompt = FOLLOW_UP_PROMPT.format(question=question, answer=answer, grade=grade)
+        response = llm.invoke(prompt)
+        follow_up_question = response.content.strip()
+    except Exception as e:
+        print(f"Follow-up generation failed: {e}")
+        follow_up_question = "Let's move on. " # Failsafe
+    
+    print(f"Asking follow-up: {follow_up_question}")
+    
+    # --- State Management (REVERSED) ---
+    # We will now append the follow-up question directly AFTER
+    # the SystemMessage containing the feedback.
+    messages = state["messages"]
+        
+    return {
+        "messages": messages + [AIMessage(content=follow_up_question, name="Interviewer")]
+        # Note: We do NOT update question_count or covered_questions
+        # We also keep the current_question_id the same
+    }
+
+
 def wait_for_answer_node(state: InterviewAgentState) -> dict:
     """
     Pause the graph to wait for the user's answer.
@@ -396,8 +464,14 @@ def wait_for_answer_node(state: InterviewAgentState) -> dict:
 
 
 
+# REPLACE your evaluate_answer_node with this:
+
 def evaluate_answer_node(state: InterviewAgentState) -> dict:
-    """Evaluate the user's answer."""
+    """
+    Evaluate the user's answer.
+    If it's a follow-up, this node will UPDATE the previous evaluation.
+    If it's a new question, it will APPEND a new evaluation.
+    """
     print("\n--- Node: evaluate_answer ---")
     
     messages = state["messages"]
@@ -407,7 +481,6 @@ def evaluate_answer_node(state: InterviewAgentState) -> dict:
     for i, msg in enumerate(reversed(messages)):
         if isinstance(msg, HumanMessage) and msg.name != "Interviewer":
             answer_msg = msg
-            # Find the preceding AI Interviewer message
             for j in range(len(messages) - i - 2, -1, -1):
                 if isinstance(messages[j], AIMessage) and messages[j].name == "Interviewer":
                     question_msg = messages[j]
@@ -415,22 +488,22 @@ def evaluate_answer_node(state: InterviewAgentState) -> dict:
             break
     
     if not question_msg or not answer_msg:
-        print("Q/A pair not found (This is normal if user just typed 'stop')")
-        return {"evaluation_report": []}
+        print("Q/A pair not found (Normal for 'stop' command)")
+        return {} # Return empty, no change
     
-    # Get topic and difficulty from state
+    # Get metadata from state
+    current_q_id = state["current_question_id"]
     topic = state.get("current_question_topic", "general").lower()
     difficulty = state.get("current_question_difficulty", "medium")
     
     # LLM Evaluation
     try:
         prompt = EVALUATION_PROMPT.format(
-            question=question_msg.content,
+            question=question_msg.content, # This will be the follow-up question
             answer=answer_msg.content
         )
         response = llm.invoke(prompt)
         
-        # Parse with regex
         grade = re.search(r"GRADE:\s*(.+)", response.content, re.IGNORECASE)
         skill = re.search(r"SKILL:\s*(.+)", response.content, re.IGNORECASE)
         feedback = re.search(r"FEEDBACK:\s*(.+)", response.content, re.IGNORECASE | re.DOTALL)
@@ -440,38 +513,64 @@ def evaluate_answer_node(state: InterviewAgentState) -> dict:
         feedback = feedback.group(1).strip() if feedback else "No feedback."
         
         print(f"Grade: {grade.upper()} | Skill: {skill} | Topic: {topic} | Difficulty: {difficulty}")
-        
-        # --- MINIMAL CHANGE IS HERE ---
-        # Print the feedback immediately to the console
+
+        # Print feedback immediately
         print("\n" + "="*40 + "\nFEEDBACK*" + "="*40)
         print(f"Grade: {grade.upper()}\nFeedback: {feedback}")
         print("="*40)
-        # --- END OF CHANGE ---
 
     except Exception as e:
         print(f"Evaluation failed: {e}")
         grade, skill, feedback = "error", "unknown", str(e)
 
-    # Update topic performance tracking
+    # --- STATE UPDATE LOGIC (MODIFIED) ---
+    
+    # Get full copies of the lists from the state
+    current_report = state.get("evaluation_report", []).copy()
     topic_performance = state.get("topic_performance", {}).copy()
     if topic not in topic_performance:
         topic_performance[topic] = []
-    
-    topic_performance[topic].append({
-        "question_id": state["current_question_id"],
-        "evaluation": grade,
-        "difficulty": difficulty,
-        "timestamp": datetime.now().isoformat()
-    })
-    
-    # Keep only last 5 evaluations per topic
-    topic_performance[topic] = topic_performance[topic][-5:]
-    
-    return {
-        "messages": [SystemMessage(content=f"Grade: {grade.upper()}\nFeedback: {feedback}")],
-        "evaluation_report": [{
-            "question_id": state["current_question_id"],
-            "question": question_msg.content,
+
+    # Check if this is a follow-up for the last question in the report
+    is_follow_up = bool(
+        current_report and 
+        current_report[-1]["question_id"] == current_q_id
+    )
+
+    if is_follow_up:
+        print("This is a follow-up. UPDATING previous grade.")
+        
+        # --- 1. Update Evaluation Report ---
+        # Get the last evaluation, update it
+        last_eval_report = current_report[-1]
+        last_eval_report["evaluation"] = grade
+        last_eval_report["feedback"] = feedback
+        last_eval_report["answer"] = f"{last_eval_report.get('answer', '')}\n[FOLLOW-UP]: {answer_msg.content}" # Append answer
+        last_eval_report["timestamp"] = datetime.now().isoformat()
+        
+        # --- 2. Update Topic Performance ---
+        # Find the corresponding entry in topic_performance and update it
+        if topic_performance[topic]:
+            # We assume the last entry in topic_performance matches
+            last_perf_entry = topic_performance[topic][-1]
+            if last_perf_entry["question_id"] == current_q_id:
+                last_perf_entry["evaluation"] = grade # Update the grade
+                last_perf_entry["timestamp"] = datetime.now().isoformat()
+        
+        # Return the MODIFIED full lists
+        return {
+            "messages": [SystemMessage(content=f"Grade (Updated): {grade.upper()}\nFeedback: {feedback}")],
+            "evaluation_report": current_report, # Return the whole list
+            "topic_performance": topic_performance # Return the whole dict
+        }
+        
+    else:
+        print("This is a new question. APPENDING to report.")
+        
+        # --- 1. Create New Evaluation Report Entry ---
+        new_eval_entry = {
+            "question_id": current_q_id,
+            "question": question_msg.content, # This is the first time asking
             "answer": answer_msg.content,
             "evaluation": grade,
             "feedback": feedback,
@@ -479,21 +578,79 @@ def evaluate_answer_node(state: InterviewAgentState) -> dict:
             "timestamp": datetime.now().isoformat(),
             "topic": topic,
             "difficulty": difficulty
-        }],
-        "topic_performance": topic_performance
-    }
+        }
+        
+        # --- 2. Create New Topic Performance Entry ---
+        topic_performance[topic].append({
+            "question_id": current_q_id,
+            "evaluation": grade,
+            "difficulty": difficulty,
+            "timestamp": datetime.now().isoformat()
+        })
+        # Keep only last 5
+        topic_performance[topic] = topic_performance[topic][-5:]
+
+        # Return the UPDATED full list by appending the new entry
+        return {
+            "messages": [SystemMessage(content=f"Grade: {grade.upper()}\nFeedback: {feedback}")],
+            "evaluation_report": current_report + [new_eval_entry], # Append and return
+            "topic_performance": topic_performance # Return the whole dict
+        }
+    
 def update_coverage_node(state: InterviewAgentState) -> dict:
-    """Update covered questions."""
+    """Update covered questions (modified to return full list)."""
     print("--- Node: update_coverage ---")
     
     current_id = state.get("current_question_id")
-    if current_id and current_id not in ["NONE", "ERROR", "DONE"]:
-        covered = state.get("covered_questions", [])
-        if current_id not in covered:
-            print(f"Covered: {current_id}")
-            return {"covered_questions": [current_id]}
+    if not current_id or current_id in ["NONE", "ERROR", "DONE"]:
+        return {}
+
+    # Get the full list from state
+    covered = state.get("covered_questions", []).copy()
     
-    return {}
+    if current_id not in covered:
+        print(f"Covered: {current_id}")
+        covered.append(current_id) # Add to the list
+        return {"covered_questions": covered} # Return the ENTIRE updated list
+    
+    return {} # No changes
+
+def decide_action_router(state: InterviewAgentState) -> Literal["ask_follow_up", "get_new_question"]:
+    """
+    Decides whether to ask a follow-up or move to a new question.
+    """
+    print("--- Router: decide_action ---")
+    
+    try:
+        last_eval = state.get("evaluation_report", [])[-1]
+        grade = last_eval["evaluation"].lower()
+        
+        # --- Optimization: ---
+        # If the answer was great, don't waste time/tokens deciding. Just move on.
+        if grade in ["excellent", "good"]:
+            print("Answer was good. Moving to new question.")
+            return "get_new_question"
+        
+        # --- LLM-Powered Choice ---
+        # For "moderate" or "bad" answers, let the LLM decide.
+        question = last_eval["question"]
+        answer = last_eval["answer"]
+        
+        prompt = ACTION_CHOICE_PROMPT.format(question=question, answer=answer, grade=grade)
+        response = llm.invoke(prompt)
+        choice = response.content.upper().strip()
+        
+        if "FOLLOW_UP" in choice:
+            print("LLM decided to ask a follow-up.")
+            return "ask_follow_up"
+        else:
+            print("LLM decided to move on.")
+            return "get_new_question"
+            
+    except Exception as e:
+        print(f"Action router failed: {e}. Defaulting to new question.")
+        return "get_new_question"
+
 
 def should_continue_router(state: InterviewAgentState) -> Literal["generate_question", "synthesize_and_update"]:
     """Route to next node."""
@@ -555,6 +712,7 @@ def synthesize_and_update_node(state: InterviewAgentState) -> dict:
     }
 
 # --- 5. Build Graph ---
+# --- 5. Build Graph ---
 print("\nBuilding LangGraph Graph...")
 
 workflow = StateGraph(InterviewAgentState)
@@ -564,25 +722,41 @@ workflow.add_node("start_interview", start_interview_node)
 workflow.add_node("generate_question", generate_question_node)
 workflow.add_node("wait_for_answer", wait_for_answer_node) 
 workflow.add_node("evaluate_answer", evaluate_answer_node)
+workflow.add_node("ask_follow_up", ask_follow_up_node) # <-- NEW NODE
 workflow.add_node("update_coverage", update_coverage_node)
 workflow.add_node("synthesize_and_update", synthesize_and_update_node)
 
-# --- Define flow (UPDATED) ---
+# --- Define flow (NEW WIRING) ---
 workflow.add_edge(START, "start_interview")
 workflow.add_edge("start_interview", "generate_question")
 
-# The graph now loops:
+# The main interview loop
 workflow.add_edge("generate_question", "wait_for_answer")
 workflow.add_edge("wait_for_answer", "evaluate_answer")
-workflow.add_edge("evaluate_answer", "update_coverage")
 
-# Router
+# --- NEW: Action Router ---
+# After evaluating, decide what to do next
+workflow.add_conditional_edges(
+    "evaluate_answer",
+    decide_action_router, # The new router
+    {
+        "ask_follow_up": "ask_follow_up",         # Path 1: Ask follow-up
+        "get_new_question": "update_coverage"   # Path 2: Move on (update coverage first)
+    }
+)
+
+# The follow-up node loops back to wait for an answer
+workflow.add_edge("ask_follow_up", "wait_for_answer")
+
+# --- OLD: Continue Router ---
+# This router is now only hit after the agent decides to "get_new_question"
+# Its job is to check for "stop" words and max questions
 workflow.add_conditional_edges(
     "update_coverage",
     should_continue_router,
     {
-        "generate_question": "generate_question", # Loop back
-        "synthesize_and_update": "synthesize_and_update"
+        "generate_question": "generate_question",       # Loop back for new question
+        "synthesize_and_update": "synthesize_and_update"  # End session
     }
 )
 
