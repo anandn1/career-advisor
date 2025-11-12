@@ -24,7 +24,7 @@ from settings import (
     llm,
     embedding_function,
     CHROMA_PERSIST_DIR,
-    DB_URI,
+    DB_URL,
     COHERE_API_KEY
 )
 
@@ -260,7 +260,7 @@ You have two tools:
 
 
 # Create the agent
-with PostgresSaver.from_conn_string(DB_URI) as checkpointer:
+with PostgresSaver.from_conn_string(DB_URL) as checkpointer:
     checkpointer.setup()
     agent = create_agent(
                         llm, 
