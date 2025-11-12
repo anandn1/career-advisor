@@ -1,0 +1,191 @@
+#TOPIC: Data Structures & Algorithms
+
+#DIFFICULTY: Easy
+What is a binary tree, and how would you implement traversal?
+---
+Implement bubble sort and explain its time complexity.​
+---
+Reverse a linked list or array in place.​
+---
+Print all permutations of a string (iterative and recursive).​
+---
+Determine if an array contains duplicates.​
+---
+
+#DIFFICULTY: Medium
+Count leaf nodes in a binary tree.​
+---
+Write a program to merge overlapping intervals.​
+---
+Implement BFS or DFS for generic graphs and trees.​
+---
+Find all pairs in an array that sum to a target value.​
+---
+Use hash tables to solve frequency/search problems.​
+---
+
+#DIFFICULTY: Hard
+Topologically sort a DAG and detect cycles.​
+---
+Implement an LFU or LRU cache.​
+---
+Matrix multiplication and transposition in C++.​
+---
+Design dynamic programming solutions for edit distance or coin change.​
+---
+Write and optimize a convolution kernel (padding included).​
+
+#TOPIC: GPU, CUDA, Parallel Computing
+
+#DIFFICULTY: Medium
+What is CUDA, and how does it work with C++/Python for GPU acceleration?​
+---
+Explain memory coalescing in CUDA and its impact on performance.​
+---
+How do you profile a CUDA application for bottlenecks (using Nsight tools)?​
+---
+
+#DIFFICULTY: Hard
+Optimize memory usage and data transfer between host and device in CUDA applications.​
+---
+Design scalable CUDA kernels across different GPU architectures.​
+---
+Describe the memory hierarchy in a modern GPU (register, shared, global, constant memory).​
+---
+Write maintainable, efficient CUDA kernels, avoiding common pitfalls.​
+---
+Design an interface for job management on heterogeneous GPU hardware.​
+
+#TOPIC: System Design
+
+#DIFFICULTY: Medium
+Design a proximity server for real-time task scheduling.​
+---
+How would you build a shared cloud file system for large-scale storage?​
+---
+Design an event-driven chatbot for a website.​
+---
+What considerations are needed for graphics-rich mobile game application design?​
+---
+
+#DIFFICULTY: Hard
+How would you design a memory allocator for high-throughput GPUs?​
+---
+Design scalable systems for high-performance rendering or AI inferencing.​
+---
+Implement interfaces for multi-GPU job scheduling and failover.​
+---
+Build a platform for distributed deep learning workloads across nodes.​
+
+#TOPIC: Deep Learning & Machine Learning
+
+#DIFFICULTY: Medium
+Explain ROC curve, recall, and precision for model evaluation.​
+---
+Describe the architecture for CNNs, RNNs, LSTMs, GANs, and Transformers; discuss typical use cases.​
+---
+Strategies for combating overfitting in tree-based models (cross-validation, regularization).​
+---
+
+#DIFFICULTY: Hard
+Architect a pipeline for large-scale distributed training on Nvidia hardware.​
+---
+Design a recommender system (e.g., for Netflix typeahead search, rental listings).​
+---
+How do you modify neural networks to address mislabeled data and improve robustness?​
+---
+Discuss vector databases and semantic search (NLP index for podcasts).​
+---
+Optimize CNN/RNN/GAN models for vision/language tasks using Nvidia libraries (cuDNN, TensorRT).​
+
+#TOPIC: Software Engineering/Programming Principles
+
+#DIFFICULTY: Easy
+Difference between union and structure in C.​
+---
+What is an interrupt?
+---
+Polymorphism in C++.​
+---
+Describe stack overflow, virtual memory, and shared memory in kernels.​
+---
+
+#DIFFICULTY: Medium
+Use C++ for performance-centric system-level programming (memory/pointer management).​
+---
+Programming best practices for low-level kernel code and device drivers.​
+---
+Concurrency and race conditions: detection and avoidance.​
+---
+
+#DIFFICULTY: Hard
+Implement robust memory allocators or garbage collectors for custom runtimes.​
+---
+Debug and profile high-performance C++/CUDA codebases with Nvidia tools.​
+
+#TOPIC: Operating Systems
+
+#DIFFICULTY: Easy
+Difference between kernel mode and user mode.​
+---
+Role of stack and queue in OS; managing buffers and interrupts.​
+---
+
+#DIFFICULTY: Medium
+Virtual memory and memory hierarchy design for GPU and OS.​
+---
+
+#DIFFICULTY: Hard
+Shared memory management between processes and threads in Linux/multi-GPU systems.​
+---
+Architect platform-level OS optimizations for graphics, cloud, or AI workloads.​
+
+#TOPIC: Behavioral & Collaboration
+
+#Relevant for All Levels
+Describe a challenging project and how you overcame technical obstacles.​
+---
+How do you collaborate with hardware, ML, and product teams to drive innovations?​
+---
+Share an example of profiling or optimizing an application for production deployment.​
+
+#TOPIC: Frameworks, Libraries, and Tools (if asked)
+
+#DIFFICULTY: Medium
+Experience with Nvidia Nsight for profiling and debugging GPU code.​
+---
+How do you use TensorRT, cuDNN, or cuBLAS for deep learning on Nvidia hardware?​
+---
+Knowledge of RAPIDS or Triton for end-to-end data science pipelines.​
+---
+
+#DIFFICULTY: Hard
+Design and deploy containerized GPU workloads using Kubernetes, Docker, and Nvidia GPU Operator.​
+---
+Manage distributed model serving and optimization with NVIDIA Triton Inference Server.​
+---
+Integrate custom CUDA kernels into PyTorch/TensorFlow for advanced tasks.​
+
+#TOPIC: Domain-Specific (if asked for graphics, automotive, robotics, etc.)
+
+#DIFFICULTY: Medium
+Use of OpenGL, Vulkan, or DirectX in performance rendering on GPU.​
+---
+Simulation frameworks for robotics or autonomous driving (Nvidia Isaac).​
+---
+
+#DIFFICULTY: Hard
+Optimize graphics pipeline for real-time rendering and latency.
+---
+Architect an edge-to-cloud pipeline for sensor fusion and distributed inferencing.
+---
+Implement object detection, SLAM, or trajectory planning for robotics.
+
+#TOPIC: Data Engineering
+
+#DIFFICULTY: Medium
+Design ETL workflows optimized for GPU (batch/streaming with RAPIDS).​
+---
+Optimize parallel ingest, transformations, and data serving for ML workloads.
+---
+Design distributed storage and data replication for high-throughput/low-latency AI pipelines.
