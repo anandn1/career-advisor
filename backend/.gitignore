@@ -173,4 +173,7 @@ poetry.toml
 # LSP config files
 pyrightconfig.json
 
+# Ignore the persistent Chroma vector database
+chroma_db_market/
+
 # End of https://www.toptal.com/developers/gitignore/api/python
