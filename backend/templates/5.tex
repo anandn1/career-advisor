@@ -1,0 +1,153 @@
+\documentclass[a4paper,11pt]{article}
+
+% ===================
+% Packages
+% ===================
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{array}
+\usepackage{setspace}
+
+% ===================
+% Page Setup
+% ===================
+\geometry{margin=1in}
+\setstretch{1.1}
+\renewcommand{\familydefault}{\sfdefault}
+
+% ===================
+% Colors and Links
+% ===================
+\definecolor{cvblue}{HTML}{003366}
+\definecolor{lightgray}{HTML}{EAEAEA}
+\hypersetup{
+  colorlinks=true,
+  urlcolor=cvblue,
+  linkcolor=cvblue
+}
+
+% ===================
+% Section Formatting
+% ===================
+\titleformat{\section}
+  {\Large\bfseries\color{cvblue}}
+  {}{0em}{}
+  [\vspace{0.3em}\titlerule]
+
+\titleformat{\subsection}
+  {\bfseries\color{cvblue}}
+  {}{0em}{}
+
+\setlist[itemize]{noitemsep, topsep=2pt, leftmargin=1em}
+
+% ===================
+% Custom Commands
+% ===================
+\newcommand{\MyName}[1]{%
+  \begin{center}
+    {\Huge\bfseries #1}\\[4pt]
+  \end{center}
+}
+
+\newcommand{\ContactInfo}[1]{%
+  \begin{center}
+    {\small #1}
+  \end{center}
+  \vspace{0.5em}
+}
+
+\newcommand{\Entry}[4]{%
+  \noindent
+  \begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}p{0.75\textwidth}r}
+    \textbf{#2} & \textbf{#1} \\
+  \end{tabular*}\\[-0.4em]
+  {\emph{#3}}\\
+  #4
+  \vspace{0.6em}
+}
+
+\newcommand{\SubEntry}[2]{%
+  \textbf{#1:} #2\\
+}
+
+% ===================
+% Document Start
+% ===================
+\begin{document}
+
+% -------------------
+% HEADER
+% -------------------
+\MyName{Jane Doe}
+
+\ContactInfo{
+  01.01.1990, born in Sample, Sampleland ·
+  Samplestreet 1, 1000 Samplecity ·
+  012 345 67 89 ·
+  \href{mailto:sample@sample.com}{sample@sample.com}
+}
+
+% -------------------
+% EDUCATION
+% -------------------
+\section*{Education}
+
+\Entry{2.2018 – Present}{Master of Sample Science}{Sample University}{
+Focus on sample topics.\\
+Master Thesis: \emph{Sample Title.}\\
+\textbf{Projects:}
+\begin{itemize}
+  \item Sample project 1
+  \item Sample project 2
+  \item Sample project 3
+\end{itemize}
+}
+
+\Entry{9.2013 – 9.2017}{Bachelor of Sample Science}{Sample University}{
+Bachelor Thesis: \emph{Sample Title.}\\
+\textbf{Projects:}
+\begin{itemize}
+  \item Sample project 1
+  \item Sample project 2
+\end{itemize}
+}
+
+\Entry{8.2009 – 6.2013}{Matura with focus on Sample}{Sample School}{
+\begin{itemize}
+  \item Sample Title
+\end{itemize}
+}
+
+% -------------------
+% WORK EXPERIENCE
+% -------------------
+\section*{Work Experience}
+
+\Entry{9.2017 – 2.2018}{Intern}{Sample AG}{
+\begin{itemize}
+  \item Assisted in sample tasks.
+  \item Conducted analysis and reporting.
+  \item Collaborated on sample projects.
+\end{itemize}
+}
+
+% -------------------
+% SKILLS
+% -------------------
+\section*{Skills and Qualifications}
+
+\SubEntry{Programming Languages}{Python, C++, Java, SQL}
+\SubEntry{Tools \& Frameworks}{Git, Docker, React, Node.js}
+\SubEntry{Languages}{Native: English · Basic: French}
+
+% -------------------
+% INTERESTS
+% -------------------
+
+
+\end{document}

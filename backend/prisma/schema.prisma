@@ -1,0 +1,164 @@
+generator client {
+  provider             = "prisma-client-py"
+  recursive_type_depth = 5
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("MODEL_DB_URL")
+}
+
+
+model ResumeTemplate {
+  id           String   @id @default(uuid())
+  name         String   @unique @db.VarChar(255)  // Add @unique here
+  latexSrc     String   @map("latex_src") @db.Text
+  previewImage String?  @map("preview_image") @db.VarChar(500)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Resume templates are tagged (like Technology, Startup, etc.)
+  tags Tag[]
+
+  // Generated resumes linked to this template
+  generatedResumes GeneratedResume[]
+
+  @@map("resume_templates")
+}
+
+
+model Tag {
+  id    String  @id @default(uuid())
+  name  String  @unique @db.VarChar(100)
+
+  templates ResumeTemplate[]
+
+  @@map("tags")
+}
+
+
+model User {
+  id             Int     @id @default(autoincrement())
+  githubUsername String? @unique @map("github_username") @db.VarChar(255)
+  email          String? @unique @db.VarChar(255)
+  fullName       String? @map("full_name") @db.VarChar(255)
+  hashedPassword String? @map("hashed_password") @db.VarChar(255)
+  avatarUrl      String? @map("avatar_url") @db.VarChar(500)
+  location       String? @db.VarChar(255)
+  bio            String? @db.Text
+
+  // Auto and AI extracted data from GitHub
+  skills          Json? @map("skills")              // extracted from GitHub repos
+  customSkills    Json? @map("custom_skills")       // user-added skills
+  aiPredictedTags Json? @map("ai_predicted_tags")   // LLM inferred domains
+  topLanguages    Json? @map("top_languages")       // GitHub API languages summary
+  repoSummaries   Json? @map("repo_summaries")      // repo name, topics, description
+
+  currentRole     String? @map("current_role") @db.VarChar(255)
+  experienceYears Int?    @default(0) @map("experience_years")
+  educationLevel  String? @map("education_level") @db.VarChar(100)
+
+  // Metadata
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relationships
+  skillsRelation     Skill[]             @relation("UserSkills")
+  assessments        Assessment[]
+  recommendations    CareerRecommendation[]
+  parsedProfiles     ParsedProfile[]
+  generatedResumes   GeneratedResume[]
+
+  @@map("users")
+}
+
+
+model Skill {
+  id          Int     @id @default(autoincrement())
+  name        String  @unique @db.VarChar(255)
+  category    String? @db.VarChar(100)
+  description String? @db.Text
+
+  users User[] @relation("UserSkills")
+
+  @@map("skills")
+}
+
+
+model Assessment {
+  id             Int      @id @default(autoincrement())
+  userId         Int      @map("user_id")
+  assessmentType String?  @map("assessment_type") @db.VarChar(100)
+  score          Float?
+  results        String?  @db.Text
+  completedAt    DateTime @default(now()) @map("completed_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("assessments")
+}
+
+model CareerPath {
+  id                Int     @id @default(autoincrement())
+  title             String  @db.VarChar(255)
+  description       String? @db.Text
+  industry          String? @db.VarChar(100)
+  requiredEducation String? @map("required_education") @db.VarChar(100)
+  avgSalaryMin      Int?    @map("avg_salary_min")
+  avgSalaryMax      Int?    @map("avg_salary_max")
+  growthOutlook     String? @map("growth_outlook") @db.VarChar(50)
+
+  recommendations CareerRecommendation[]
+
+  @@map("career_paths")
+}
+
+model CareerRecommendation {
+  id                 Int      @id @default(autoincrement())
+  userId             Int      @map("user_id")
+  careerPathId       Int      @map("career_path_id")
+  matchScore         Float?   @map("match_score")
+  reasoning          String?  @db.Text
+  recommendedActions String?  @map("recommended_actions") @db.Text
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  careerPath CareerPath @relation(fields: [careerPathId], references: [id], onDelete: Cascade)
+
+  @@map("career_recommendations")
+}
+
+model ParsedProfile {
+  id           Int      @id @default(autoincrement())
+  userId       Int      @map("user_id")
+  sourceUrl    String   @map("source_url") @db.VarChar(500)
+  platform     String?  @db.VarChar(100) // e.g., "GitHub", "LinkedIn"
+  parsedData   Json     @map("parsed_data") // structured JSON (repos, skills, etc.)
+  parsedAt     DateTime @default(now()) @map("parsed_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  generatedResumes GeneratedResume[]
+
+  @@map("parsed_profiles")
+}
+
+model GeneratedResume {
+  id              Int       @id @default(autoincrement())
+  userId          Int       @map("user_id")
+  templateId      String    @map("template_id")
+  parsedProfileId Int?      @map("parsed_profile_id")
+  finalLatexSrc   String?   @map("final_latex_src") @db.Text // modified LaTeX with user data
+  pdfUrl          String?   @map("pdf_url") @db.VarChar(500)
+  generationTags  Json?     @map("generation_tags")  // tags used for template match
+  sourceData      Json?     @map("source_data")      // merged GitHub + AI data
+  status          String?   @default("completed") @db.VarChar(50)
+  generatedAt     DateTime  @default(now()) @map("generated_at")
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  template      ResumeTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  parsedProfile ParsedProfile? @relation(fields: [parsedProfileId], references: [id], onDelete: SetNull)
+
+  @@map("generated_resumes")
+}

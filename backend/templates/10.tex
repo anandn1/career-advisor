@@ -1,0 +1,131 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[a4paper,margin=1cm]{geometry}
+\usepackage{multicol}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{parskip}
+
+%----------------------------------------------------------
+% COLORS AND FONTS
+%----------------------------------------------------------
+\definecolor{royalblue}{RGB}{0,51,153}
+\definecolor{magenta}{RGB}{204,51,153}
+\definecolor{darkgray}{RGB}{60,60,60}
+
+\pagestyle{empty}
+\setlength{\columnsep}{1cm}
+\setlist[itemize]{leftmargin=*,itemsep=0.3em}
+
+% Section formatting
+\titleformat{\section}
+  {\large\bfseries\color{royalblue}}
+  {}{0em}{}
+
+\titleformat{\subsection}
+  {\normalsize\bfseries\color{magenta}}
+  {}{0em}{}
+
+%----------------------------------------------------------
+% BEGIN DOCUMENT
+%----------------------------------------------------------
+\begin{document}
+
+\begin{center}
+    {\Huge\bfseries\color{royalblue} FIRSTNAME LASTNAME}\\[4pt]
+    \href{mailto:first.last@email.com}{first.last@email.com} \,|\, 
+    \href{tel:+1999999999}{+1 999 999 9999} \,|\, 
+    \href{https://linkedin.com/in/username}{linkedin.com/in/username} \,|\, 
+    \href{https://github.com/username}{github.com/username}
+\end{center}
+
+\vspace{1em}
+
+%----------------------------------------------------------
+% TWO COLUMN LAYOUT
+%----------------------------------------------------------
+\begin{multicols}{2}
+\raggedright
+
+%----------------------------------------------------------
+% LEFT COLUMN
+%----------------------------------------------------------
+\section*{Experience}
+
+\textbf{Weyland Yutani Industries} \hfill \textit{May 2021 – Present}\\
+\textcolor{magenta}{Program Manager, Tokyo, Japan}
+\begin{itemize}
+    \item Led multi-disciplinary teams to deliver 5+ major tech projects on schedule.
+    \item Improved client satisfaction from 88\% to 99.9\% through effective communication.
+    \item Reduced operational costs by 12\% via process optimization.
+\end{itemize}
+
+\textbf{Tessier-Ashpoole S.A.} \hfill \textit{Jul 2016 – Mar 2019}\\
+\textcolor{magenta}{Software Developer, Villa Straylight, U.S.}
+\begin{itemize}
+    \item Developed scalable REST APIs improving performance by 30\%.
+    \item Integrated cloud-based systems for data processing.
+    \item Mentored junior developers and reviewed over 200 PRs.
+\end{itemize}
+
+\textbf{LexCorp} \hfill \textit{Jul 2012 – Mar 2016}\\
+\textcolor{magenta}{Software Developer, Metropolis}
+\begin{itemize}
+    \item Created internal tools that saved 20\% of engineering time.
+    \item Implemented automation pipelines for builds and deployment.
+\end{itemize}
+
+\section*{Projects}
+\textbf{Chess Engine (C++)}
+\begin{itemize}
+    \item Built a heuristic-based chess engine using minimax and alpha-beta pruning.
+\end{itemize}
+
+\textbf{Speech-enabled Chatbot (C\#, MS Bot Framework)}
+\begin{itemize}
+    \item Designed conversational AI for automated customer support.
+\end{itemize}
+
+%----------------------------------------------------------
+% RIGHT COLUMN
+%----------------------------------------------------------
+\columnbreak
+
+\section*{Skills}
+
+\subsection*{Programming}
+\textbf{Proficient:} C\#, JavaScript, Python, SQL, HTML/CSS\\
+\textbf{Experienced:} LaTeX, C++\\
+\textbf{Familiar:} Java, Shell, Assembly
+
+\subsection*{Frameworks \& Tools}
+React, Node.js, Git, Docker, Webpack, Heroku
+
+\section*{Education}
+
+\textbf{University of Utah}\\
+Master’s in Computer Science\\
+\textit{Jan 2021 – Present | SLC, Utah}\\
+GPA: 3.85 / 4.0
+
+\vspace{0.8em}
+
+\textbf{University of Oregon}\\
+Bachelor’s in Computer Science and Engineering\\
+\textit{May 2016 | Corvallis, OR}\\
+GPA: 3.7 / 4.0
+
+\section*{References}
+\textbf{John Doe} — Senior Developer, Tyrell Corp\\
+\href{mailto:john.doe@email.com}{john.doe@email.com} | +1 999 999 9999
+
+\vspace{0.4em}
+\textbf{Jane Doe} — Lead Engineer, Primatech\\
+\href{mailto:jane.doe@email.com}{jane.doe@email.com} | +1 999 999 9999
+
+\end{multicols}
+
+\end{document}

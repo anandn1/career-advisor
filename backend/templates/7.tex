@@ -1,0 +1,156 @@
+\documentclass[a4paper,11pt]{article}
+
+% =====================
+% PACKAGES
+% =====================
+\usepackage[margin=0.9in]{geometry}
+\usepackage[dvipsnames]{xcolor}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{helvet}
+\renewcommand{\familydefault}{\sfdefault}
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks=true,
+    urlcolor=MidnightBlue,
+    linkcolor=black
+}
+
+% =====================
+% COLORS & STYLE
+% =====================
+\definecolor{HeaderColor}{HTML}{1A237E} % Deep blue
+\definecolor{AccentColor}{HTML}{C71585} % Magenta accent
+\definecolor{GrayText}{gray}{0.4}
+
+% =====================
+% SECTION FORMATTING
+% =====================
+\titleformat{\section}
+  {\Large\bfseries\sffamily\color{HeaderColor}}
+  {}{0em}{}
+  [\vspace{0.4em}\titlerule]
+
+\titlespacing*{\section}{0pt}{1.2em}{0.8em}
+
+% =====================
+% ITEMIZE STYLE
+% =====================
+\setlist[itemize]{leftmargin=1em, itemsep=0.3em, topsep=2pt}
+
+% =====================
+% COMMANDS
+% =====================
+\newcommand{\HeaderName}[1]{%
+    \begin{center}
+        {\Huge\bfseries\sffamily\color{HeaderColor} #1}\\[4pt]
+        \vspace{0.3em}
+    \end{center}
+}
+
+\newcommand{\ContactInfo}[3]{%
+    \begin{center}
+        {\small \textcolor{GrayText}{#1 \,|\, #2 \,|\, #3}}
+    \end{center}
+}
+
+\newcommand{\ExperienceEntry}[4]{%
+    \textbf{#1} \hfill {\small\color{GrayText} #2}\\
+    \textit{#3}\\[-0.3em]
+    \begin{itemize}
+        #4
+    \end{itemize}
+}
+
+\newcommand{\EducationEntry}[3]{%
+    \textbf{#1} \hfill {\small\color{GrayText} #2}\\
+    \textit{#3}\\[0.5em]
+}
+
+% =====================
+% DOCUMENT START
+% =====================
+\begin{document}
+
+% HEADER
+\HeaderName{JANE DOE}
+\ContactInfo{jane.doe@email.com}{+1 (555) 123-4567}{Houston, TX}
+
+\vspace{1.2em}
+
+% =====================
+% SUMMARY
+% =====================
+\section*{Summary}
+Financial Advisor with 7+ years of experience delivering investment advisory services to high-value clients. Proven success in managing multi-million dollar portfolios, increasing ROI through strategic planning, and providing top-tier personalized financial consultation.
+
+% =====================
+% EXPERIENCE
+% =====================
+\section*{Professional Experience}
+
+\ExperienceEntry
+{Wells Fargo Advisors, Houston, TX — Senior Financial Advisor}
+{Jan 2020 – Present}
+{}
+{
+    \item Deliver personalized financial advice and manage \$190M AUM portfolios for 300+ clients.
+    \item Increased client satisfaction from 88\% to 99.9\% within 6 months through proactive service.
+    \item Developed data-driven investment strategies for high-net-worth clients.
+}
+
+\ExperienceEntry
+{SunTrust Investment Services, New Orleans, LA — Financial Advisor}
+{Apr 2017 – Dec 2019}
+{}
+{
+    \item Managed \$20M in assets for 90+ corporate and individual clients.
+    \item Introduced performance tracking model improving ROI by 15\%.
+    \item Collaborated with insurance and estate planning teams to diversify portfolios.
+}
+
+\ExperienceEntry
+{Maverick Capital Management, New Orleans, LA — Financial Advisor}
+{Jan 2015 – Mar 2017}
+{}
+{
+    \item Served as primary advisor for 15+ clients managing \$8.5M in total assets.
+    \item Focused on client relationship building and sustainable investment growth.
+}
+
+% =====================
+% EDUCATION
+% =====================
+\section*{Education}
+
+\EducationEntry
+{Louisiana State University, Baton Rouge, LA}
+{July 2014}
+{Bachelor of Science in Business Administration}
+
+% =====================
+% SKILLS
+% =====================
+\section*{Technical \& Professional Skills}
+\begin{itemize}
+    \item \textbf{Finance Tools:} Bloomberg Terminal, MS Excel, QuickBooks
+    \item \textbf{CRM Systems:} Salesforce, HubSpot
+    \item \textbf{Soft Skills:} Communication, Negotiation, Leadership, Client Relationship Management
+\end{itemize}
+
+% =====================
+% CERTIFICATIONS
+% =====================
+\section*{Certifications}
+\begin{itemize}
+    \item Certified Financial Planner (CFP)
+    \item Chartered Financial Analyst (CFA) Level II Candidate
+\end{itemize}
+
+% =====================
+% INTERESTS
+% =====================
+\section*{Interests}
+Personal finance literacy advocacy, mentoring junior advisors, reading market analysis reports, and cycling.
+
+\end{document}
