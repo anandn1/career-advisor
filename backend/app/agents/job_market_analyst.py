@@ -948,7 +948,7 @@ if __name__ == "__main__":
     # Get user skills
     user_skills = get_user_skills()
     
-    with PostgresSaver.from_conn_string(DB_URI) as checkpointer:
+    with PostgresSaver.from_conn_string(DB_URL) as checkpointer:
         checkpointer.setup()
         
         workflow = create_workflow()
