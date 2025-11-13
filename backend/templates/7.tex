@@ -1,152 +1,156 @@
-\documentclass[11pt,a4paper]{article}
-\usepackage[utf8]{inputenc}
-\usepackage[T1]{fontenc}
-\usepackage{geometry}
-\usepackage{xcolor}
-\usepackage{enumitem}
-\usepackage{titlesec}
-\usepackage{fontspec}
-\usepackage{fontawesome5}
-\usepackage{calc}
-\usepackage{tikz}
+\documentclass[a4paper,11pt]{article}
 
-% Set page margins
-\geometry{
-    top=0.8in,
-    bottom=0.8in,
-    left=0.8in,
-    right=0.8in
+% =====================
+% PACKAGES
+% =====================
+\usepackage[margin=0.9in]{geometry}
+\usepackage[dvipsnames]{xcolor}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{helvet}
+\renewcommand{\familydefault}{\sfdefault}
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks=true,
+    urlcolor=MidnightBlue,
+    linkcolor=black
 }
 
-% Set fonts
-\setmainfont{Roboto}
+% =====================
+% COLORS & STYLE
+% =====================
+\definecolor{HeaderColor}{HTML}{1A237E} % Deep blue
+\definecolor{AccentColor}{HTML}{C71585} % Magenta accent
+\definecolor{GrayText}{gray}{0.4}
 
-% Define colors
-\definecolor{bluepurple}{RGB}{102, 102, 255}
-\definecolor{magenta}{RGB}{204, 51, 153}
-\definecolor{darkgray}{RGB}{85, 85, 85}
-\definecolor{lightgray}{RGB}{128, 128, 128}
+% =====================
+% SECTION FORMATTING
+% =====================
+\titleformat{\section}
+  {\Large\bfseries\sffamily\color{HeaderColor}}
+  {}{0em}{}
+  [\vspace{0.4em}\titlerule]
 
-% Remove page numbering
-\pagestyle{empty}
+\titlespacing*{\section}{0pt}{1.2em}{0.8em}
 
-% Remove paragraph indentation
-\setlength{\parindent}{0pt}
-\setlength{\parskip}{0pt}
+% =====================
+% ITEMIZE STYLE
+% =====================
+\setlist[itemize]{leftmargin=1em, itemsep=0.3em, topsep=2pt}
 
+% =====================
+% COMMANDS
+% =====================
+\newcommand{\HeaderName}[1]{%
+    \begin{center}
+        {\Huge\bfseries\sffamily\color{HeaderColor} #1}\\[4pt]
+        \vspace{0.3em}
+    \end{center}
+}
+
+\newcommand{\ContactInfo}[3]{%
+    \begin{center}
+        {\small \textcolor{GrayText}{#1 \,|\, #2 \,|\, #3}}
+    \end{center}
+}
+
+\newcommand{\ExperienceEntry}[4]{%
+    \textbf{#1} \hfill {\small\color{GrayText} #2}\\
+    \textit{#3}\\[-0.3em]
+    \begin{itemize}
+        #4
+    \end{itemize}
+}
+
+\newcommand{\EducationEntry}[3]{%
+    \textbf{#1} \hfill {\small\color{GrayText} #2}\\
+    \textit{#3}\\[0.5em]
+}
+
+% =====================
+% DOCUMENT START
+% =====================
 \begin{document}
 
-% Header section
-{\color{bluepurple}\fontsize{24}{28}\selectfont\bfseries THOMAS BEASLEY}
+% HEADER
+\HeaderName{JANE DOE}
+\ContactInfo{jane.doe@email.com}{+1 (555) 123-4567}{Houston, TX}
 
-\vspace{1em}
+\vspace{1.2em}
 
-% Contact information with icons
-\begin{minipage}[t]{0.5\textwidth}
-    \faPhone\ (770) 625-9660\\[0.3em]
-    \faEnvelope\ thomasb@gmail.com\\[0.3em]
-    \faMapMarker\ 366 Margaret Street,Houston, TX 47587\\[0.3em]
-    \faLinkedin\ linkedin.com/in/thomas.beasley
-\end{minipage}
+% =====================
+% SUMMARY
+% =====================
+\section*{Summary}
+Financial Advisor with 7+ years of experience delivering investment advisory services to high-value clients. Proven success in managing multi-million dollar portfolios, increasing ROI through strategic planning, and providing top-tier personalized financial consultation.
 
-\vspace{1.5em}
+% =====================
+% EXPERIENCE
+% =====================
+\section*{Professional Experience}
 
-% Summary Section
-{\color{magenta}\fontsize{14}{16}\selectfont\bfseries SUMMARY}
+\ExperienceEntry
+{Wells Fargo Advisors, Houston, TX — Senior Financial Advisor}
+{Jan 2020 – Present}
+{}
+{
+    \item Deliver personalized financial advice and manage \$190M AUM portfolios for 300+ clients.
+    \item Increased client satisfaction from 88\% to 99.9\% within 6 months through proactive service.
+    \item Developed data-driven investment strategies for high-net-worth clients.
+}
 
-\vspace{0.5em}
+\ExperienceEntry
+{SunTrust Investment Services, New Orleans, LA — Financial Advisor}
+{Apr 2017 – Dec 2019}
+{}
+{
+    \item Managed \$20M in assets for 90+ corporate and individual clients.
+    \item Introduced performance tracking model improving ROI by 15\%.
+    \item Collaborated with insurance and estate planning teams to diversify portfolios.
+}
 
-Financial Advisor with 7+ years of experience delivering financial/investment advisory services to high value clients. Proven success in managing multi-million dollar portfolios, driving profitability, and increasing ROI through skillful strategic planning, consulting, and financial advisory services.
+\ExperienceEntry
+{Maverick Capital Management, New Orleans, LA — Financial Advisor}
+{Jan 2015 – Mar 2017}
+{}
+{
+    \item Served as primary advisor for 15+ clients managing \$8.5M in total assets.
+    \item Focused on client relationship building and sustainable investment growth.
+}
 
-\vspace{1.5em}
+% =====================
+% EDUCATION
+% =====================
+\section*{Education}
 
-% Professional Experience Section
-{\color{magenta}\fontsize{14}{16}\selectfont\bfseries PROFESSIONAL EXPERIENCE}
+\EducationEntry
+{Louisiana State University, Baton Rouge, LA}
+{July 2014}
+{Bachelor of Science in Business Administration}
 
-\vspace{0.8em}
+% =====================
+% SKILLS
+% =====================
+\section*{Technical \& Professional Skills}
+\begin{itemize}
+    \item \textbf{Finance Tools:} Bloomberg Terminal, MS Excel, QuickBooks
+    \item \textbf{CRM Systems:} Salesforce, HubSpot
+    \item \textbf{Soft Skills:} Communication, Negotiation, Leadership, Client Relationship Management
+\end{itemize}
 
-\begin{minipage}[t]{0.25\textwidth}
-    \raggedright
-    Month 20XX --\\
-    Present
-\end{minipage}
-\hfill
-\begin{minipage}[t]{0.7\textwidth}
-    {\color{bluepurple}\bfseries Wells Fargo Advisors, Houston, TX | Senior Financial Advisor}
-    \begin{itemize}[leftmargin=1em, itemsep=0.3em]
-        \item Deliver financial advice to clients, proposing strategies to achieve short and long-term objectives for investments, insurance, business and estate planning with minimal risk
-        \item Develop, review, and optimize investment portfolios for 300+ high value clients with over \$190M AUM (Assets Under Management)
-        \item Ensure maximum client satisfaction by providing exceptional and personalized service, enhancing client satisfaction ratings from 88\% to 99.9\% in less than 6 months
-    \end{itemize}
-\end{minipage}
+% =====================
+% CERTIFICATIONS
+% =====================
+\section*{Certifications}
+\begin{itemize}
+    \item Certified Financial Planner (CFP)
+    \item Chartered Financial Analyst (CFA) Level II Candidate
+\end{itemize}
 
-\vspace{1em}
-
-\begin{minipage}[t]{0.25\textwidth}
-    \raggedright
-    Month 20XX --\\
-    Present
-\end{minipage}
-\hfill
-\begin{minipage}[t]{0.7\textwidth}
-    {\color{bluepurple}\bfseries SunTrust Investment Services, New Orleans, LA | Financial Advisor}
-    \begin{itemize}[leftmargin=1em, itemsep=0.3em]
-        \item Served as knowledgeable financial advisor to clients, managing an over \$20.75M investment portfolio of 90+ individual and corporate clients
-        \item Devised and applied a new training and accountability program that increased productivity from \#10 to \#3 in the region in less than 2 year period
-        \item Partnered with cross-functional teams in consulting with clients to provide asset management risk strategy and mitigation, which increased AUM by 50\%
-    \end{itemize}
-\end{minipage}
-
-\vspace{1em}
-
-\begin{minipage}[t]{0.25\textwidth}
-    \raggedright
-    Month 20XX --\\
-    Present
-\end{minipage}
-\hfill
-\begin{minipage}[t]{0.7\textwidth}
-    {\color{bluepurple}\bfseries Maverick Capital Management, New Orleans, LA | Financial Advisor}
-    \begin{itemize}[leftmargin=1em, itemsep=0.3em]
-        \item Served as the primary point of contact for over 15 clients
-        \item Managed the portfolios of several major clients with over \$8.5M in total assets
-    \end{itemize}
-\end{minipage}
-
-\vspace{1.5em}
-
-% Education and Additional Skills sections
-\begin{minipage}[t]{0.48\textwidth}
-    {\color{magenta}\fontsize{14}{16}\selectfont\bfseries EDUCATION}
-    
-    \vspace{0.5em}
-    
-    \textbf{Louisiana State University-- Baton Rouge, LA}\\
-    Bachelor of Science in Business, July 20XX
-\end{minipage}
-\hfill
-\begin{minipage}[t]{0.48\textwidth}
-    {\color{magenta}\fontsize{14}{16}\selectfont\bfseries ADDITIONAL SKILLS}
-    
-    \vspace{0.5em}
-    
-    \begin{itemize}[leftmargin=1em, itemsep=0.2em]
-        \item Proficient in MS Office (Word, Excel, PowerPoint)
-        \item MS Project
-        \item Salesforce
-    \end{itemize}
-\end{minipage}
-
-% Decorative bottom design
-\vfill
-\noindent
-\begin{minipage}{\textwidth}
-    \begin{tikzpicture}[anchor=south west]
-        % Blue-purple horizontal bar across bottom
-        \fill[color=bluepurple] (0,0) rectangle (\textwidth,0.8cm);
-        % Magenta triangle cutting in from top right
-        \fill[color=magenta] (\textwidth-4cm,0.8cm) -- (\textwidth,0.8cm) -- (\textwidth,0) -- cycle;
-    \end{tikzpicture}
-\end{minipage}
+% =====================
+% INTERESTS
+% =====================
+\section*{Interests}
+Personal finance literacy advocacy, mentoring junior advisors, reading market analysis reports, and cycling.
 
 \end{document}
