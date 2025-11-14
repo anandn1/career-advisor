@@ -24,9 +24,9 @@ from langchain_core.messages import (
 from dotenv import load_dotenv
 from langchain_core.documents import Document
 
-from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_community.vectorstores import Chroma
-from langchain_community.tools.tavily_search import TavilySearchResults
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_chroma import Chroma
+from langchain_tavily import TavilySearchResults
 
 print("Loading environment variables...")
 load_dotenv()

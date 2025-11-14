@@ -1,8 +1,11 @@
 # Ignore the local vector database
 chroma_db_market/
 chroma_db_interview_questions/
+chroma_db/
 
 # Ignore all .env files
 **/.env\
 .venv/
-venv/
+venv/resume_output
+
+resume_output/
