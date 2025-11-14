@@ -1,7 +1,44 @@
-%-----------------------------------------------------------------------------------------------------------------------------------------------%
-%	The MIT License (MIT)
-%
-%	Copyright (c) 2021 Jitin Nair
-%
-%	Permission is hereby granted, free of charge, to any person obtaining a copy
-%	of this...
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{subcaption}
+
+\begin{document}
+
+\title{LaTeX Document}
+\author{}
+\date{}
+\maketitle
+
+\section{Introduction}
+LaTeX is a document preparation system based on TeX.
+
+\subsection{History}
+LaTeX was created in the early 1980s by Leslie Lamport.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.5\textwidth]{example.png}
+    \caption{Example figure}
+\end{figure}
+
+\begin{equation}
+    E = mc^2
+\end{equation}
+
+\begin{table}[H]
+    \centering
+    \begin{tabular}{|c|c|}
+        \hline
+        Column 1 & Column 2 \\
+        \hline
+        Cell 1  & Cell 2 \\
+        \hline
+    \end{tabular}
+    \caption{Example table}
+\end{table}
+
+\end{document}

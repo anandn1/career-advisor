@@ -40,6 +40,9 @@ llm = ChatGroq(
     model_name="llama-3.3-70b-versatile",
     api_key=api_key
 )
+TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY")
+if not TAVILY_API_KEY:
+    print("WARNING: TAVILY_API_KEY not found. Re-ranker will not function.")
 
 # --- 2. Shared Embedding Model (The "Encoder") ---
 # This model is loaded once (on your CPU) and shared for all RAG operations.
