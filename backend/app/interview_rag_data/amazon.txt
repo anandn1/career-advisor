@@ -1,0 +1,162 @@
+#TOPIC: Data Structures & Algorithms
+#DIFFICULTY: Easy
+Reverse a string or linked list.
+---
+Implement stack with push(), pop(), and min() in O(1) time.
+---
+Find the K largest elements in an array or file.
+---
+Find a pair with a given sum in an array.
+---
+
+#DIFFICULTY: Medium
+Merge two sorted linked lists.
+---
+Rotate a matrix by 90 degrees.
+---
+Find the longest substring without repeating characters.
+---
+Implement LRU Cache.
+---
+
+#DIFFICULTY: Hard
+Find the median of two sorted arrays.
+---
+Design a data stream (kth largest, etc.).
+---
+Find the stock span problem, next greater element.
+---
+Compute edit distance between two strings.
+---
+K most frequent elements in an array or string.
+
+
+#TOPIC: System Design
+#DIFFICULTY: Medium
+Design a URL shortener like TinyURL.
+---
+Design a scalable file storage service (e.g., Amazon S3-lite).
+---
+Design an API rate limiter.
+---
+
+#DIFFICULTY: Hard
+Design an Amazon-like shopping cart and checkout process.
+---
+Design a recommendation system for e-commerce.
+---
+Design a messaging service (like Amazon SNS/SQS).
+
+
+#TOPIC: Databases
+#DIFFICULTY: Easy
+Define ACID properties. Give examples.
+---
+Difference between primary and foreign keys.
+---
+
+#DIFFICULTY: Medium
+Explain indexing and its impact.
+---
+Describe transaction isolation levels.
+---
+
+#DIFFICULTY: Hard
+How would you shard a high-traffic Amazon item catalog database?
+---
+Design a fault-tolerant distributed database.
+
+
+#TOPIC: Operating Systems
+#DIFFICULTY: Easy
+What is a thread? How is it different from a process?
+---
+What is a deadlock?
+---
+
+#DIFFICULTY: Medium
+Explain memory management and paging.
+---
+What is synchronization? How do you achieve it between threads?
+---
+
+#DIFFICULTY: Hard
+Design a custom memory allocator for high-throughput servers.
+---
+Analyze process scheduling in a distributed system.
+
+
+#TOPIC: Networking
+#DIFFICULTY: Easy
+TCP vs UDP: Major differences.
+---
+Explain what a socket is.
+---
+
+#DIFFICULTY: Medium
+Describe the process of how a web request flows from browser to server.
+---
+How does a load balancer work in a cloud environment?
+---
+
+#DIFFICULTY: Hard
+Design a global CDN to serve Amazon product images.
+---
+Make low-latency connections between AWS data centers.
+
+
+#TOPIC: Security
+#DIFFICULTY: Easy
+What is authentication vs. authorization?
+---
+What is HTTPS and why is it used?
+---
+
+#DIFFICULTY: Medium
+How does OAuth2 work? What problem does it solve?
+---
+Explain techniques for secure API design.
+---
+
+#DIFFICULTY: Hard
+Design a key management system for global-scale e-commerce apps.
+---
+Discuss securing microservices in a service mesh.
+
+
+#TOPIC: Leadership Principles & Behavioral (Bar Raiser)
+#Relevant at All Levels
+Tell me about a time you went above and beyond for a customer.
+---
+Tell me about a major failure you experienced and how you handled it.
+---
+Describe a time you had to work with limited resources or tight deadlines.
+---
+Give an example of when you invented something or improved a process.
+---
+Tell me about a decision you made that was unpopular and why you made it.
+---
+Give examples of how you build trust within a new team.
+---
+Discuss a time you had to influence change by only asking questions.
+---
+Name an instance where you showed ownership without being told.
+
+
+#TOPIC: Language-Specific (C/C++/Java/Python)
+#DIFFICULTY: Easy
+What are the main differences between Java and C++?
+---
+Explain the concept of inheritance in OOPs.
+---
+
+#DIFFICULTY: Medium
+Implement a custom iterator in your language of choice.
+---
+What are generics/templates and when would you use them?
+---
+
+#DIFFICULTY: Hard
+Implement a concurrency primitive (mutex, semaphore, etc.) from scratch.
+---
+Debug a complex multi-threading issue in given code.
