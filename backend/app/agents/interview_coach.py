@@ -6,6 +6,8 @@ import random
 from datetime import datetime
 import re
 import uuid 
+import psycopg
+
 from langgraph.types import Command, interrupt
 from langchain_core.messages import ( 
     BaseMessage, 
@@ -14,6 +16,7 @@ from langchain_core.messages import (
     AIMessage
 )
 
+#from langgraph.checkpoint.postgres import PostgresCheckpointer
 
 from langgraph.graph import StateGraph, START, END, MessagesState
 from langgraph.checkpoint.postgres import PostgresSaver
@@ -802,25 +805,131 @@ def prompt_for_choice(prompt: str, choices: List[str]) -> str:
             print("Invalid input. Please enter a number.")
 
 
-def run_interactive_interview():
-    """Execute a live, interactive interview session."""
+# def run_interactive_interview():
+#     """Execute a live, interactive interview session."""
+    
+#     session_id = f"interview_{str(uuid.uuid4())}"
+#     config = {"configurable": {"thread_id": session_id}}
+#     print(f"Starting new interview session: {session_id}")
+    
+#     # --- 1. Get Interview Config ---
+    
+#     # --- MODIFIED: Define topic lists ---
+#     # (Adjust these lists to match your actual topics)
+#     proficient_topics = ["Data Structures & Algorithms", "System Design"]
+#     all_topics = ["Data Structures & Algorithms", "System Design", "Python", "Machine Learning"]
+#     gap_topics = ["Python", "Machine Learning"]
+#     # --- END MODIFIED ---
+
+#     # --- MODIFIED: Prompt for focus ---
+#     focus_choices = ["proficient", "all", "gaps"] # From your state definition
+#     interview_focus = prompt_for_choice("Choose your interview focus:", focus_choices)
+    
+#     topic_list = []
+#     if interview_focus == "proficient":
+#         topic_list = proficient_topics
+#     elif interview_focus == "all":
+#         topic_list = all_topics
+#     elif interview_focus == "gaps":
+#         topic_list = gap_topics
+            
+#     print(f"Topics set: {', '.join(topic_list)}")
+#     # --- END MODIFIED ---
+
+#     # --- MODIFIED: Prompt for company ---
+#     company_choices = ["amazon", "microsoft", "nvidia",  "netflix", "meta", "google", "generic", "all"]
+#     company_focus = prompt_for_choice("Choose your company focus:", company_choices)
+#     # --- END MODIFIED ---
+    
+#     initial_state = {
+#         "user_id": "interactive_user",
+#         "interview_focus": interview_focus, # Set from user input
+#         "company_focus": company_focus,     # Set from user input
+#         "topic_list": topic_list,           # Set from user input
+#         "messages": [],
+#     }
+    
+#     # --- 2. Start Interview (First Invoke) ---
+#     print("\nStarting interview... (Type 'stop' at any time to end)")
+#     # This runs the graph until the first interrupt()
+#     result = interview_agent.invoke(initial_state, config=config)
+    
+#     # Print the first question
+#     print_agent_output(result["messages"])
+    
+#     # --- 3. Interaction Loop ---
+#     # (The rest of this function remains unchanged)
+#     while "__interrupt__" in result:
+#         try:
+#             # Get user input from the command line
+#             user_input = input("\nYour Answer: ")
+            
+#             # Create the payload to resume the graph
+#             resume_payload = {"messages": [HumanMessage(content=user_input)]}
+            
+#             # Resume the graph
+#             result = interview_agent.invoke(Command(resume=resume_payload), config=config)
+            
+#             # Print new output (feedback + new question)
+#             print_agent_output(result["messages"])
+            
+#         except KeyboardInterrupt:
+#             print("\n\nInterview interrupted by user. Ending session.")
+#             break
+#         except Exception as e:
+#             print(f"\nAn error occurred: {e}")
+#             break
+    
+#     # --- 4. Print Final Summary ---
+#     if "__interrupt__" not in result:
+#         print("\n" + "="*50 + "\nINTERVIEW COMPLETE\n" + "="*50)
+#         # The final message is the summary
+#         print(result['messages'][-1].content)
+def run_interactive_interview(
+    user_skills: Optional[List[str]] = None,
+    skill_gaps: Optional[List[str]] = None,
+    target_role: Optional[str] = None,
+    suggested_topics: Optional[List[str]] = None
+):
+    """Execute a live, interactive interview session WITH user context."""
     
     session_id = f"interview_{str(uuid.uuid4())}"
     config = {"configurable": {"thread_id": session_id}}
     print(f"Starting new interview session: {session_id}")
     
-    # --- 1. Get Interview Config ---
+    # SHOW USER CONTEXT
+    if target_role:
+        print(f"\nTarget Role: {target_role}")
+    if user_skills:
+        print(f"Your Skills: {len(user_skills)} identified")
+        print(f"  Sample: {', '.join(user_skills[:5])}")
+    if skill_gaps:
+        print(f"Skill Gaps to Address: {len(skill_gaps)}")
+        print(f"  Top gaps: {', '.join(skill_gaps[:5])}")
     
-    # --- MODIFIED: Define topic lists ---
-    # (Adjust these lists to match your actual topics)
-    proficient_topics = ["Data Structures & Algorithms", "System Design"]
-    all_topics = ["Data Structures & Algorithms", "System Design", "Python", "Machine Learning"]
-    gap_topics = ["Python", "Machine Learning"]
-    # --- END MODIFIED ---
+    # --- Get Interview Config ---
+    
+    # USE SUGGESTED TOPICS IF PROVIDED
+    if suggested_topics:
+        proficient_topics = suggested_topics
+        all_topics = suggested_topics
+        gap_topics = suggested_topics
+        print(f"\nUsing personalized topics based on your skill analysis:")
+        for i, topic in enumerate(suggested_topics, 1):
+            print(f"  {i}. {topic}")
+    else:
+        # Fallback to defaults
+        proficient_topics = ["Data Structures & Algorithms", "System Design"]
+        all_topics = ["Data Structures & Algorithms", "System Design", "Python", "Machine Learning"]
+        gap_topics = ["Python", "Machine Learning"]
+        print("\nUsing default topics (no context provided)")
 
-    # --- MODIFIED: Prompt for focus ---
-    focus_choices = ["proficient", "all", "gaps"] # From your state definition
-    interview_focus = prompt_for_choice("Choose your interview focus:", focus_choices)
+    # SMART DEFAULT: Focus on gaps if they exist
+    if skill_gaps and len(skill_gaps) > 3:
+        print("\nTIP: Select 'gaps' to focus on areas that need improvement")
+    
+    focus_choices = ["proficient", "all", "gaps"]
+    interview_focus = prompt_for_choice("\nChoose your interview focus:", focus_choices)
     
     topic_list = []
     if interview_focus == "proficient":
@@ -831,43 +940,45 @@ def run_interactive_interview():
         topic_list = gap_topics
             
     print(f"Topics set: {', '.join(topic_list)}")
-    # --- END MODIFIED ---
 
-    # --- MODIFIED: Prompt for company ---
-    company_choices = ["amazon", "microsoft", "nvidia",  "netflix", "meta", "google", "generic", "all"]
-    company_focus = prompt_for_choice("Choose your company focus:", company_choices)
-    # --- END MODIFIED ---
+    company_choices = ["amazon", "microsoft", "nvidia", "netflix", "meta", "google", "generic", "all"]
+    company_focus = prompt_for_choice("\nChoose your company focus:", company_choices)
     
+    # PASS USER CONTEXT TO INITIAL STATE
     initial_state = {
         "user_id": "interactive_user",
-        "interview_focus": interview_focus, # Set from user input
-        "company_focus": company_focus,     # Set from user input
-        "topic_list": topic_list,           # Set from user input
+        "interview_focus": interview_focus,
+        "company_focus": company_focus,
+        "topic_list": topic_list,
         "messages": [],
+        # Store context for potential use in evaluation
+        "_user_context": {
+            "skills": user_skills or [],
+            "gaps": skill_gaps or [],
+            "role": target_role
+        }
     }
     
-    # --- 2. Start Interview (First Invoke) ---
+    # Start Interview (First Invoke)
     print("\nStarting interview... (Type 'stop' at any time to end)")
-    # This runs the graph until the first interrupt()
     result = interview_agent.invoke(initial_state, config=config)
     
     # Print the first question
     print_agent_output(result["messages"])
     
-    # --- 3. Interaction Loop ---
-    # (The rest of this function remains unchanged)
+    # Interaction Loop
     while "__interrupt__" in result:
         try:
-            # Get user input from the command line
+            # Get user input
             user_input = input("\nYour Answer: ")
             
-            # Create the payload to resume the graph
+            # Create resume payload
             resume_payload = {"messages": [HumanMessage(content=user_input)]}
             
             # Resume the graph
             result = interview_agent.invoke(Command(resume=resume_payload), config=config)
             
-            # Print new output (feedback + new question)
+            # Print new output
             print_agent_output(result["messages"])
             
         except KeyboardInterrupt:
@@ -877,15 +988,34 @@ def run_interactive_interview():
             print(f"\nAn error occurred: {e}")
             break
     
-    # --- 4. Print Final Summary ---
+    # Print Final Summary
     if "__interrupt__" not in result:
         print("\n" + "="*50 + "\nINTERVIEW COMPLETE\n" + "="*50)
-        # The final message is the summary
         print(result['messages'][-1].content)
 
+# Initialize interview agent at module level for import
+# Initialize interview agent at module level for import
+try:
+    # 1. create a psycopg connection
+    pg_conn = psycopg.connect(DB_URL)
 
-with PostgresSaver.from_conn_string(DB_URL) as interview_checkpointer:
+    # 2. create PostgresSaver with the psycopg connection
+    interview_checkpointer = PostgresSaver(pg_conn)
+
+    # 3. compile agent with checkpointer
     interview_agent = workflow.compile(checkpointer=interview_checkpointer)
-    print("Agent compiled and ready!")
-    if __name__ == "__main__":
-        run_interactive_interview()
+
+    print("✅ Interview agent compiled WITH PostgresSaver + psycopg connection")
+
+except Exception as e:
+    import traceback
+    print("❌ Failed to initialize Postgres checkpointer!")
+    traceback.print_exc()
+
+    interview_checkpointer = None
+    interview_agent = workflow.compile()
+    print("⚠ Running WITHOUT checkpointer (resume will NOT work!)")
+
+print("CHECKPOINTER USED:", interview_agent.checkpointer)
+if __name__ == "__main__":
+    run_interactive_interview()

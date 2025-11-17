@@ -192,6 +192,9 @@ def fetchJobs(role: str, location: Optional[str], start: int):
     except Exception:
         raise HTTPException(status_code=500, detail="Failed to fetch jobs")
 
+@app.get("/health")
+def health():
+    return {"status": "ok"}
 
 @app.get("/api/jobs")
 async def getJobs(
