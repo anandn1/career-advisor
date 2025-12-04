@@ -123,11 +123,12 @@ career-advisor/
 
 ## Project Context
 
-This project was developed as part of the **"Agentic AI"** course at **IIIT Dharwad**, under the guidance of **Dr. Sunil Saumya**.
+This project was developed as part of the **"Agentic AI"** course at **IIIT Raichur**, under the guidance of **Dr. Sunil Saumya** of **IIIT Dharwad**.
 
 ## License
 
 Distributed under the MIT License. See `LICENSE` for more information.
+
 
 
 
