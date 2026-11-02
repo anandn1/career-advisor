@@ -1,11 +1,21 @@
-# Ignore the local vector database
+# Secrets
+.env
+**/.env
+!.env.example
+
+# Python virtualenvs
+.venv/
+venv/
+
+# Local vector databases
+chroma_db/
 chroma_db_market/
 chroma_db_interview_questions/
-chroma_db/
+resume_templates_db/
 
-# Ignore all .env files
-**/.env\
-.venv/
-venv/resume_output
-
+# Generated output
 resume_output/
+report_session_*.txt
+
+# Internal planning docs
+architect-plan.md
