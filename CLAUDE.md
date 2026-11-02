@@ -9,6 +9,12 @@ Agentic AI Career Advisor (IIIT Dharwad "Agentic AI" course project): LangGraph 
 - Backend agents are refactored into plain, parameter-driven functions. There is no FastAPI app, frontend or Docker setup yet; `app/cli.py` is the only front-end.
 - Tooling: ruff configured; pytest configured but there are no tests yet.
 
+## Branching
+
+- Work happens on version branches named `release/vX.Y` (currently `release/v2.0`). Branch features from the version branch and open PRs against it, never against `main`.
+- The version branch merges into `main` in one PR, only when the whole version works end to end and the repo owner approves.
+- A GitHub ruleset protects `main` and `release/**`: only the repo admin can push or merge, and nobody can force-push or delete. PRs show "blocked" until the admin bypasses (`gh pr merge <n> --admin`).
+
 ## Commands
 
 The Python project lives in `backend/` and uses **uv** (Python 3.12, CPU-only torch). Run commands from `backend/`:
