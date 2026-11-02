@@ -1,106 +1,94 @@
-# interview_agent_v3_interactive.py
-import os
-from typing import TypedDict, List, Literal, Annotated, Optional, Dict
-import operator
+"""Interview coach: an adaptive mock interview that pauses for each answer.
+
+The graph asks a question retrieved from the interview-question store, then
+interrupts. Each answer resumes it from the Postgres checkpoint (keyed by
+thread ID), so a session can span many HTTP requests. Difficulty adapts per
+topic, and weak answers may get an LLM-written follow-up.
+"""
+
+import logging
 import random
-from datetime import datetime
 import re
-import uuid 
-import psycopg
+from dataclasses import dataclass
+from datetime import datetime
+from functools import cache
+from typing import Literal
 
-from langgraph.types import Command, interrupt
-from langchain_core.messages import ( 
-    BaseMessage, 
-    SystemMessage, 
-    HumanMessage, 
-    AIMessage
-)
-
-#from langgraph.checkpoint.postgres import PostgresCheckpointer
-
-from langgraph.graph import StateGraph, START, END, MessagesState
-from langgraph.checkpoint.postgres import PostgresSaver
-
-
-from langchain_cohere import CohereRerank
-from langchain_chroma import Chroma
-from langchain_core.prompts import PromptTemplate
 from langchain_classic.retrievers.contextual_compression import (
     ContextualCompressionRetriever,
 )
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
+from langchain_core.prompts import PromptTemplate
+from langchain_core.retrievers import BaseRetriever
+from langgraph.graph import END, START, MessagesState, StateGraph
+from langgraph.graph.state import CompiledStateGraph
+from langgraph.types import Command, interrupt
 
-# --- Project Imports ---
-import sys
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+from app.core.checkpointer import get_checkpointer
+from app.core.config import get_settings
+from app.core.resources import get_chroma, get_llm, get_reranker
 
-from settings import llm, embedding_function, DB_URL, COHERE_API_KEY
+logger = logging.getLogger(__name__)
 
-# --- Configuration ---
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-
-INTERVIEW_CHROMA_DIR = os.path.join(SCRIPT_DIR, "ingestion", "chroma_db_interview_questions")
 MAX_QUESTIONS_PER_SESSION = 15
-MESSAGE_HISTORY_LIMIT = 10
-USE_IN_MEMORY_CHECKPOINTER = False
+CANDIDATE_QUESTIONS = 15
+RERANKED_QUESTIONS = 5
+RANDOM_PICK_FROM_TOP = 3
+TOPIC_HISTORY_LENGTH = 5
+INTERVIEWER = "Interviewer"
+COMPANIES = ("amazon", "apple", "google", "meta", "microsoft", "netflix", "nvidia", "generic")
+ALL_DIFFICULTIES = ["easy", "medium", "hard"]
+STOP_WORDS = {"stop", "done", "end", "finish", "quit"}
+GOOD_GRADES = {"excellent", "good"}
+NO_QUESTION_IDS = {"NONE", "ERROR", "DONE"}
+DEFAULT_TOPICS = ["Data Structures & Algorithms", "System Design"]
 
-# --- 1. State Definition ---
+# Skill-gap keywords and the interview topic each maps to.
+TOPIC_FOR_KEYWORD = {
+    "angular": "Frontend Frameworks",
+    "react": "Frontend Frameworks",
+    "vue": "Frontend Frameworks",
+    "aws": "Cloud & DevOps",
+    "azure": "Cloud & DevOps",
+    "docker": "Cloud & DevOps",
+    "kubernetes": "Cloud & DevOps",
+    "python": "Programming Languages",
+    "java": "Programming Languages",
+    "go": "Programming Languages",
+    "javascript": "Programming Languages",
+    "typescript": "Programming Languages",
+    "sql": "Databases",
+    "postgresql": "Databases",
+    "mongodb": "Databases",
+    "system design": "System Design",
+    "api": "System Design",
+    "microservices": "System Design",
+    "css": "Frontend Basics",
+    "html": "Frontend Basics",
+    "bootstrap": "Frontend Basics",
+}
+SKILL_GAPS_TO_MAP = 15
+
+InterviewFocus = Literal["all", "proficient", "gaps"]
+
+
 class InterviewAgentState(MessagesState):
-    """Extended MessagesState for interview-specific fields."""
-    user_id: str
-    interview_focus: Literal["all", "proficient", "gaps"]
+    interview_focus: InterviewFocus
     company_focus: str
-    topic_list: List[str]
-    
-    # --- MODIFIED: REMOVED operator.add ---
-    evaluation_report: List[dict]
-    covered_questions: List[str]
-    # --- END MODIFICATION ---
-    
+    topic_list: list[str]
+    evaluation_report: list[dict]
+    covered_questions: list[str]
     current_question_id: str
-    current_question_topic: str  
-    current_question_difficulty: str  
+    current_question_topic: str
+    current_question_difficulty: str
     start_time: datetime
     question_count: int
-    topic_performance: Dict[str, List[dict]]  
-    current_difficulty_per_topic: Dict[str, List[str]]
+    topic_performance: dict[str, list[dict]]
+    current_difficulty_per_topic: dict[str, list[str]]
 
 
-print("\n" + "="*70)
-print("INITIALIZING LANGGRAPH v1.0 DEPENDENCIES")
-print("="*70)
-
-# Vector DB
-try:
-    interview_db = Chroma(
-        persist_directory=INTERVIEW_CHROMA_DIR,
-        embedding_function=embedding_function
-    )
-    count = interview_db._collection.count()
-    print(f"Interview DB: {count} questions loaded")
-except Exception as e:
-    print(f"ChromaDB Error: {e}")
-    raise RuntimeError(f"Failed to load interview DB: {e}")
-
-# Reranker
-cohere_reranker = None
-if COHERE_API_KEY:
-    try:
-        cohere_reranker = CohereRerank(
-            cohere_api_key=COHERE_API_KEY, 
-            model="rerank-english-v3.0"
-        )
-        print("CohereRerank initialized")
-    except Exception as e:
-        print(f"Reranker Warning: {e}")
-else:
-    print("No COHERE_API_KEY set. Reranker disabled.")
-
-print("="*70)
-
-# --- 3. LLM Prompts ---
-EVALUATION_PROMPT = PromptTemplate(
-    input_variables=["question", "answer"],
-    template="""You are a senior technical interviewer. Evaluate this answer:
+EVALUATION_PROMPT = PromptTemplate.from_template(
+    """You are a senior technical interviewer. Evaluate this answer:
 
 Question: {question}
 Candidate Answer: {answer}
@@ -111,106 +99,142 @@ SKILL: [primary technical skill tested]
 FEEDBACK: [2-3 sentences]"""
 )
 
-SUMMARY_PROMPT = PromptTemplate(
-    input_variables=["report"],
-    template="""Summarize this interview performance:
-
-{report}
-
-Provide a concise summary."""
+SUMMARY_PROMPT = PromptTemplate.from_template(
+    "Summarize this interview performance concisely:\n\n{report}"
 )
 
-# --- 3. LLM Prompts ---
-# ... (EVALUATION_PROMPT and SUMMARY_PROMPT) ...
-
-ACTION_CHOICE_PROMPT = PromptTemplate(
-    input_variables=["question", "answer", "grade"],
-    template="""You are an interview agent's routing logic.
+ACTION_CHOICE_PROMPT = PromptTemplate.from_template(
+    """You are an interview agent's routing logic.
 
 The user was asked: {question}
 The user answered: {answer}
 The evaluation was: {grade}
 
-Based on this evaluation, should you:
-1. Ask a probing follow-up question (because the answer was incomplete, vague, or 'moderate').
-2. Move on to a completely new question (because the answer was 'excellent', 'good', or 'bad' and unsalvageable).
+Should you:
+1. Ask a probing follow-up (the answer was incomplete, vague or 'moderate'), or
+2. Move on to a new question (the answer was strong, or bad and unsalvageable)?
 
-Ask follow up question strictly when its necessary, avoid unnecessary follow up questions.
-
-Important : Respond with ONLY the word "FOLLOW_UP" or "NEW_QUESTION"."""
+Ask a follow-up only when it is really necessary.
+Respond with ONLY the word "FOLLOW_UP" or "NEW_QUESTION"."""
 )
 
-FOLLOW_UP_PROMPT = PromptTemplate(
-    input_variables=["question", "answer", "grade"],
-    template="""You are a technical interviewer.
+FOLLOW_UP_PROMPT = PromptTemplate.from_template("""You are a technical interviewer.
 
 Original Question: {question}
 Candidate's Answer: {answer}
 Your internal evaluation: {grade}
 
-Your goal is to probe deeper. Ask a SINGLE, concise follow-up question based on their answer.
-Do NOT say "Good answer" or "Okay". Just ask the follow-up question.
+Probe deeper with a SINGLE, concise follow-up question based on their answer.
+Do not say "Good answer" or "Okay"; just ask the question.
+Example: if the answer was about sharding, ask "How would you handle a hot shard?"
 
-Example: If the answer was about 'sharding', a good follow-up is 'How would you handle a hot shard?'
-
-Your follow-up question:"""
-)
-
-# --- Helper function for difficulty transitions ---
-def get_next_difficulty_state(current_diffs: List[str], upgrade: bool = False, downgrade: bool = False) -> List[str]:
-    """Return next difficulty state based on transition."""
-    
-    current_set = set(current_diffs)
-
-    if upgrade:
-        
-        if current_set != {"hard"}:
-            return ["hard", "medium"]
-        else:
-            return current_diffs # Already at ["hard"], no change
-        
-    elif downgrade:
-        # --- Downgrade Logic ---
-        # Called when user fails 2 hard questions.
-        # The new state should be ["easy"].
-        if current_set != {"easy"}:
-            return ["easy", "medium"]
-        else:
-            return current_diffs # Already at ["easy"], no change
-        
-    return current_diffs
+Your follow-up question:""")
 
 
+def topics_for_skill_gaps(skill_gaps: list[str]) -> list[str]:
+    """Map skill gaps to interview topics; System Design is always included."""
+    topics = set()
+    for gap in skill_gaps[:SKILL_GAPS_TO_MAP]:
+        topic = next((t for kw, t in TOPIC_FOR_KEYWORD.items() if kw in gap.lower()), None)
+        if topic:
+            topics.add(topic)
+    if not topics:
+        return list(DEFAULT_TOPICS)
+    return sorted(topics | {"System Design"})
 
 
+# --- Difficulty adaptation ---
+
+
+def _harder(difficulties: list[str]) -> list[str]:
+    return difficulties if set(difficulties) == {"hard"} else ["hard", "medium"]
+
+
+def _easier(difficulties: list[str]) -> list[str]:
+    return difficulties if set(difficulties) == {"easy"} else ["easy", "medium"]
+
+
+def _last_two_at(evaluations: list[dict], difficulty: str) -> list[dict]:
+    matching = [e for e in evaluations if e["difficulty"] == difficulty]
+    return matching[-2:] if len(matching) >= 2 else []
+
+
+def adapt_difficulty(topic_performance: dict, current: dict, topics: list[str]) -> dict:
+    """Two bad hard answers -> easier; two excellent easy answers -> harder."""
+    updated = dict(current)
+    for topic in (t.lower() for t in topics):
+        evaluations = topic_performance.get(topic, [])
+        difficulties = current.get(topic, ALL_DIFFICULTIES)
+        hard = _last_two_at(evaluations, "hard")
+        easy = _last_two_at(evaluations, "easy")
+        if hard and all(e["evaluation"] == "bad" for e in hard):
+            updated[topic] = _easier(difficulties)
+        elif easy and all(e["evaluation"] == "excellent" for e in easy):
+            updated[topic] = _harder(difficulties)
+        if updated.get(topic, difficulties) != difficulties:
+            logger.info("Difficulty for %s: %s -> %s", topic, difficulties, updated[topic])
+    return updated
+
+
+# --- Question retrieval ---
+
+
+def _question_store():
+    return get_chroma(get_settings().interview_chroma_dir)
+
+
+def _retriever(metadata_filter: dict) -> BaseRetriever:
+    base = _question_store().as_retriever(
+        search_kwargs={"k": CANDIDATE_QUESTIONS, "filter": metadata_filter}
+    )
+    reranker = get_reranker(top_n=RERANKED_QUESTIONS)
+    if reranker is None:
+        return base
+    return ContextualCompressionRetriever(base_compressor=reranker, base_retriever=base)
+
+
+def _companies_for(company_focus: str) -> list[str]:
+    return list(COMPANIES) if company_focus == "all" else [company_focus]
+
+
+def _question_filter(state: InterviewAgentState, difficulties: list[str] | None) -> dict:
+    conditions = [
+        {"topic": {"$in": [t.lower() for t in state["topic_list"]]}},
+        {"company": {"$in": _companies_for(state["company_focus"])}},
+    ]
+    if difficulties:
+        conditions.append({"difficulty": {"$in": difficulties}})
+    if state.get("covered_questions"):
+        conditions.append({"question_id": {"$nin": state["covered_questions"]}})
+    return {"$and": conditions}
+
+
+def _retrieve_questions(state: InterviewAgentState, difficulties: list[str]):
+    """Search with the difficulty filter, then without it if nothing matches."""
+    query = f"{state['company_focus']} interview questions on {', '.join(state['topic_list'])}"
+    for allowed in (difficulties, None):
+        try:
+            results = _retriever(_question_filter(state, allowed)).invoke(query)
+        except Exception as error:  # Chroma/Cohere failures: try the relaxed filter
+            logger.warning("Question retrieval failed: %s", error)
+            continue
+        if results:
+            return results
+    return []
+
+
+# --- Graph nodes ---
 
 
 def start_interview_node(state: InterviewAgentState) -> dict:
-    """Initialize interview session."""
-    print("\n" + "="*70)
-    print("INTERVIEW SESSION STARTING")
-    print("="*70)
-    
     if not state.get("topic_list"):
         raise ValueError("topic_list is required")
-    
-    
-    current_difficulty_per_topic = {}
-    
-    # Show initial difficulty settings
-    print(f"Initial difficulty settings: {current_difficulty_per_topic}")
-    
+    config_text = (
+        f"Interview configuration\nFocus: {state['interview_focus']}\n"
+        f"Company: {state['company_focus']}\nTopics: {', '.join(state['topic_list'])}"
+    )
     return {
-        "messages": [
-            SystemMessage(
-                content=(
-                    f"Interview Configuration\n"
-                    f"Focus: {state['interview_focus']}\n"
-                    f"Company: {state['company_focus']}\n"
-                    f"Topics: {', '.join(state['topic_list'])}"
-                )
-            )
-        ],
+        "messages": [SystemMessage(content=config_text)],
         "start_time": datetime.now(),
         "question_count": 0,
         "current_question_id": "",
@@ -219,803 +243,299 @@ def start_interview_node(state: InterviewAgentState) -> dict:
         "covered_questions": [],
         "evaluation_report": [],
         "topic_performance": {},
-        "current_difficulty_per_topic": current_difficulty_per_topic
+        "current_difficulty_per_topic": {},
     }
 
 
 def generate_question_node(state: InterviewAgentState) -> dict:
-    """RAG node to fetch the next question, using raw topics and $and filter."""
-    print(f"\n--- Node: generate_question (Q#{state.get('question_count', 0) + 1}) ---")
-    
-    topics = state["topic_list"]
-    focus = state["interview_focus"]
-    company = state["company_focus"]
-    covered_ids = state.get("covered_questions", [])
-    
-    # --- Adaptive Difficulty Logic ---
-    topic_performance = state.get("topic_performance", {})
-    current_difficulty_per_topic = state.get("current_difficulty_per_topic", {})
-    difficulty_updates = {}
-    messages_to_print = []
-    
-    # --- FIX: Loop using original case, but lookup using lowercase ---
-    for topic_original_case in topics:
-        topic = topic_original_case.lower() # Use lowercase key for lookups
-        
-        recent_evals = topic_performance.get(topic, [])
-        curr_diffs = current_difficulty_per_topic.get(topic, ["easy", "medium", "hard"])
-        
-        # --- Downgrade Logic: Check last 2 HARD questions ---
-        hard_evals = [e for e in recent_evals if e["difficulty"] == "hard"]
-        if len(hard_evals) >= 2:
-            last_two_hard = hard_evals[-2:]
-            
-            if all(e["evaluation"] == "bad" for e in last_two_hard):
-                new_diffs = get_next_difficulty_state(curr_diffs, downgrade=True)
-                if new_diffs != curr_diffs:
-                    # Print with original case for readability
-                    messages_to_print.append(f"\n{'='*70}\n>>> Difficulty decreased for {topic_original_case}: {curr_diffs} → {new_diffs}\n{'='*70}")
-                    difficulty_updates[topic] = new_diffs # Update map with lowercase key
-
-        # --- Upgrade Logic: Check last 2 EASY questions ---
-        easy_evals = [e for e in recent_evals if e["difficulty"] == "easy"]
-        
-        if len(easy_evals) >= 2 and topic not in difficulty_updates:
-            last_two_easy = easy_evals[-2:]
-            
-            if all(e["evaluation"] == "excellent" for e in last_two_easy):
-                new_diffs = get_next_difficulty_state(curr_diffs, upgrade=True)
-                if new_diffs != curr_diffs:
-                    # Print with original case for readability
-                    messages_to_print.append(f"\n{'='*70}\n>>> Difficulty increased for {topic_original_case}: {curr_diffs} → {new_diffs}\n{'='*70}\n{'='*70}")
-                    difficulty_updates[topic] = new_diffs # Update map with lowercase key
-    # --- END OF FIX ---
-
-    # Apply difficulty updates
-    updated_difficulty_map = {**current_difficulty_per_topic, **difficulty_updates}
-    
-    # Print difficulty change notifications
-    for msg in messages_to_print:
-        print(msg)
-    
-# Build filter using current difficulty settings
-    all_companies_list = ["amazon", "microsoft", "nvidia", "netflix", "meta", "google", "generic"]
-    
-    if company == "all":
-        companies_to_search = all_companies_list
-    elif company == "generic":
-        companies_to_search = ["generic"]
-    else:
-        # Search for the specific company + generic
-        companies_to_search = [company]
-    
-    print(f"Searching for companies: {companies_to_search}")
-
-    # Aggregate allowed difficulties across all topics
-    allowed_difficulties = set()
-    for topic_original_case in topics:
-        # --- FIX: Must use .lower() here too ---
-        topic = topic_original_case.lower()
-        diffs = updated_difficulty_map.get(topic, ["easy", "medium", "hard"])
-        allowed_difficulties.update(diffs)
-    
-    allowed_difficulties = list(allowed_difficulties)
-    
-    # --- Construct metadata filter (Attempt 1: Specific) ---
-    filter_conditions = [
-        {"topic": {"$in": [t.lower() for t in topics]}},
-        {"company": {"$in": companies_to_search}},
-        {"difficulty": {"$in": allowed_difficulties}},
-    ]
-    
-    if covered_ids:
-        filter_conditions.append({"question_id": {"$nin": covered_ids}})
-    
-    metadata_filter = {"$and": filter_conditions}
-    
-    print(f"Filter (Attempt 1): {metadata_filter}")
-    
-    # --- Retrieval (Attempt 1) ---
-    results = []
-    query_text = f"{company} interview questions on {', '.join(topics)}"
-    
-    try:
-        base_retriever = interview_db.as_retriever(
-            search_kwargs={"k": 15, "filter": metadata_filter}
-        )
-        
-        if cohere_reranker:
-            print("Using Cohere reranker...")
-            compressor = ContextualCompressionRetriever(
-                base_compressor=cohere_reranker, 
-                base_retriever=base_retriever
-            )
-            results = compressor.invoke(query_text)
-        else:
-            print("Using vector search...")
-            results = base_retriever.invoke(query_text)
-    except Exception as e:
-        print(f"Retrieval (Attempt 1) failed: {e}")
-        # We can continue and try the relaxed filter
-    
-    
-    # --- Fallback Retrieval (Attempt 2: Relaxed) ---
+    difficulty_map = adapt_difficulty(
+        state.get("topic_performance", {}),
+        state.get("current_difficulty_per_topic", {}),
+        state["topic_list"],
+    )
+    allowed = sorted(
+        {d for t in state["topic_list"] for d in difficulty_map.get(t.lower(), ALL_DIFFICULTIES)}
+    )
+    results = _retrieve_questions(state, allowed)
     if not results:
-        print("No questions found with specific filter. Relaxing filter (ignoring difficulty)...")
-        
-        # Build relaxed filter: only topic, company, and covered_ids
-        relaxed_filter_conditions = [
-            {"topic": {"$in": [t.lower() for t in topics]}},
-            {"company": {"$in": companies_to_search}},
-        ]
-        if covered_ids:
-            relaxed_filter_conditions.append({"question_id": {"$nin": covered_ids}})
-        
-        relaxed_metadata_filter = {"$and": relaxed_filter_conditions}
-        print(f"Filter (Attempt 2): {relaxed_metadata_filter}")
-        
-        try:
-            base_retriever = interview_db.as_retriever(
-                search_kwargs={"k": 15, "filter": relaxed_metadata_filter}
-            )
-            
-            if cohere_reranker:
-                print("Using Cohere reranker (Fallback)...")
-                compressor = ContextualCompressionRetriever(
-                    base_compressor=cohere_reranker, 
-                    base_retriever=base_retriever
-                )
-                results = compressor.invoke(query_text)
-            else:
-                print("Using vector search (Fallback)...")
-                results = base_retriever.invoke(query_text)
-        except Exception as e:
-            print(f"Retrieval (Attempt 2) failed: {e}")
-            return {
-                "messages": [SystemMessage(content=f"Error: {e}")],
-                "current_question_id": "ERROR" 
-            }
-
-    # --- Final Check ---
-    if not results:
-        print("No questions found even with relaxed filter!")
         return {
             "messages": [SystemMessage(content="No more questions available.")],
-            "current_question_id": "NONE"
+            "current_question_id": "NONE",
         }
-    
-    # MODIFIED: Select randomly from top 3 for variety 
-    N = 3
-    selectable_results = results[:N]
-    next_doc = random.choice(selectable_results)
-    
-    
-    next_question = next_doc.page_content.strip()
-    next_id = next_doc.metadata["question_id"]
-    next_topic = next_doc.metadata.get("topic", "general").lower() # Use lowercase
-    next_difficulty = next_doc.metadata.get("difficulty", "medium")
-    
-    print(f"Selected: {next_id}")
-    print(f"Topic: {next_topic} | Difficulty: {next_difficulty}")
-    
-    # Trim message history
-    messages = state.get("messages", [])
-    if len(messages) > MESSAGE_HISTORY_LIMIT:
-        messages = messages[-MESSAGE_HISTORY_LIMIT:]
-    
+    chosen = random.choice(results[:RANDOM_PICK_FROM_TOP])
     return {
-        "messages": messages + [AIMessage(content=next_question, name="Interviewer")],
-        "current_question_id": next_id,
-        "current_question_topic": next_topic,
-        "current_question_difficulty": next_difficulty,
+        "messages": [AIMessage(content=chosen.page_content.strip(), name=INTERVIEWER)],
+        "current_question_id": chosen.metadata["question_id"],
+        "current_question_topic": chosen.metadata.get("topic", "general").lower(),
+        "current_question_difficulty": chosen.metadata.get("difficulty", "medium"),
         "question_count": state.get("question_count", 0) + 1,
-        "current_difficulty_per_topic": updated_difficulty_map # Pass the updated map
+        "current_difficulty_per_topic": difficulty_map,
     }
 
+
 def ask_follow_up_node(state: InterviewAgentState) -> dict:
-    """
-    Generates an LLM-based follow-up question instead of using RAG.
-    This does NOT count as a new question.
-    """
-    print("\n--- Node: ask_follow_up ---")
-    
-    # Get the details from the last evaluation
-    last_eval = state.get("evaluation_report", [])[-1]
-    question = last_eval["question"]
-    answer = last_eval["answer"]
-    grade = last_eval["evaluation"]
-    
-    # Generate the follow-up question
+    """LLM-written follow-up on the same question; does not count as a new question."""
+    last = state["evaluation_report"][-1]
     try:
-        prompt = FOLLOW_UP_PROMPT.format(question=question, answer=answer, grade=grade)
-        response = llm.invoke(prompt)
-        follow_up_question = response.content.strip()
-    except Exception as e:
-        print(f"Follow-up generation failed: {e}")
-        follow_up_question = "Let's move on. " # Failsafe
-    
-    print(f"Asking follow-up: {follow_up_question}")
-    
-    # --- State Management (REVERSED) ---
-    # We will now append the follow-up question directly AFTER
-    # the SystemMessage containing the feedback.
-    messages = state["messages"]
-        
-    return {
-        "messages": messages + [AIMessage(content=follow_up_question, name="Interviewer")]
-        # Note: We do NOT update question_count or covered_questions
-        # We also keep the current_question_id the same
-    }
+        prompt = FOLLOW_UP_PROMPT.format(
+            question=last["question"], answer=last["answer"], grade=last["evaluation"]
+        )
+        follow_up = str(get_llm().invoke(prompt).content).strip()
+    except Exception as error:  # provider errors: fall back to moving on
+        logger.warning("Follow-up generation failed: %s", error)
+        follow_up = "Let's move on."
+    return {"messages": [AIMessage(content=follow_up, name=INTERVIEWER)]}
 
 
 def wait_for_answer_node(state: InterviewAgentState) -> dict:
-    """
-    Pause the graph to wait for the user's answer.
-    When resumed, it will return the user's message
-    to be added to the state.
-    """
-    print("--- Node: wait_for_answer (PAUSING) ---")
-    
-    # The interrupt will pause execution here.
-    # When resumed, the 'Command(resume=...)' payload
-    # will be returned by this interrupt() call.
-    resumed_value = interrupt(value="Waiting for user's answer")
-    
-    print("--- Node: wait_for_answer (RESUMED) ---")
-
-    return resumed_value
+    """Pause until resumed with Command(resume={"messages": [HumanMessage(...)]})."""
+    return interrupt("Waiting for the candidate's answer")
 
 
-
-# REPLACE your evaluate_answer_node with this:
-
-def evaluate_answer_node(state: InterviewAgentState) -> dict:
-    """
-    Evaluate the user's answer.
-    If it's a follow-up, this node will UPDATE the previous evaluation.
-    If it's a new question, it will APPEND a new evaluation.
-    """
-    print("\n--- Node: evaluate_answer ---")
-    
-    messages = state["messages"]
-    
-    # Find question-answer pair
-    question_msg = answer_msg = None
-    for i, msg in enumerate(reversed(messages)):
-        if isinstance(msg, HumanMessage) and msg.name != "Interviewer":
-            answer_msg = msg
-            for j in range(len(messages) - i - 2, -1, -1):
-                if isinstance(messages[j], AIMessage) and messages[j].name == "Interviewer":
-                    question_msg = messages[j]
-                    break
+def _last_question_and_answer(messages: list[BaseMessage]) -> tuple[str, str] | None:
+    answer = question = None
+    for message in reversed(messages):
+        if answer is None and isinstance(message, HumanMessage):
+            answer = message.content
+        elif answer is not None and isinstance(message, AIMessage) and message.name == INTERVIEWER:
+            question = message.content
             break
-    
-    if not question_msg or not answer_msg:
-        print("Q/A pair not found (Normal for 'stop' command)")
-        return {} # Return empty, no change
-    
-    # Get metadata from state
-    current_q_id = state["current_question_id"]
-    topic = state.get("current_question_topic", "general").lower()
-    difficulty = state.get("current_question_difficulty", "medium")
-    
-    # LLM Evaluation
+    return (question, answer) if question and answer else None
+
+
+def _parse_field(name: str, text: str, default: str, flags: int = 0) -> str:
+    match = re.search(rf"{name}:\s*(.+)", text, re.IGNORECASE | flags)
+    return match.group(1).strip() if match else default
+
+
+def _grade_answer(question: str, answer: str) -> tuple[str, str, str]:
+    """Return (grade, skill, feedback) from the LLM evaluation."""
     try:
-        prompt = EVALUATION_PROMPT.format(
-            question=question_msg.content, # This will be the follow-up question
-            answer=answer_msg.content
+        text = str(
+            get_llm().invoke(EVALUATION_PROMPT.format(question=question, answer=answer)).content
         )
-        response = llm.invoke(prompt)
-        
-        grade = re.search(r"GRADE:\s*(.+)", response.content, re.IGNORECASE)
-        skill = re.search(r"SKILL:\s*(.+)", response.content, re.IGNORECASE)
-        feedback = re.search(r"FEEDBACK:\s*(.+)", response.content, re.IGNORECASE | re.DOTALL)
-        
-        grade = grade.group(1).strip().lower() if grade else "moderate"
-        skill = skill.group(1).strip().lower() if skill else "general"
-        feedback = feedback.group(1).strip() if feedback else "No feedback."
-        
-        print(f"Grade: {grade.upper()} | Skill: {skill} | Topic: {topic} | Difficulty: {difficulty}")
-
-        # Print feedback immediately
-        print("\n" + "="*40 + "\nFEEDBACK*" + "="*40)
-        print(f"Grade: {grade.upper()}\nFeedback: {feedback}")
-        print("="*40)
-
-    except Exception as e:
-        print(f"Evaluation failed: {e}")
-        grade, skill, feedback = "error", "unknown", str(e)
-
-    # --- STATE UPDATE LOGIC (MODIFIED) ---
-    
-    # Get full copies of the lists from the state
-    current_report = state.get("evaluation_report", []).copy()
-    topic_performance = state.get("topic_performance", {}).copy()
-    if topic not in topic_performance:
-        topic_performance[topic] = []
-
-    # Check if this is a follow-up for the last question in the report
-    is_follow_up = bool(
-        current_report and 
-        current_report[-1]["question_id"] == current_q_id
+    except Exception as error:  # provider errors: record and carry on
+        logger.warning("Answer evaluation failed: %s", error)
+        return "error", "unknown", str(error)
+    return (
+        _parse_field("GRADE", text, "moderate").lower(),
+        _parse_field("SKILL", text, "general").lower(),
+        _parse_field("FEEDBACK", text, "No feedback.", re.DOTALL),
     )
 
-    if is_follow_up:
-        print("This is a follow-up. UPDATING previous grade.")
-        
-        # --- 1. Update Evaluation Report ---
-        # Get the last evaluation, update it
-        last_eval_report = current_report[-1]
-        last_eval_report["evaluation"] = grade
-        last_eval_report["feedback"] = feedback
-        last_eval_report["answer"] = f"{last_eval_report.get('answer', '')}\n[FOLLOW-UP]: {answer_msg.content}" # Append answer
-        last_eval_report["timestamp"] = datetime.now().isoformat()
-        
-        # --- 2. Update Topic Performance ---
-        # Find the corresponding entry in topic_performance and update it
-        if topic_performance[topic]:
-            # We assume the last entry in topic_performance matches
-            last_perf_entry = topic_performance[topic][-1]
-            if last_perf_entry["question_id"] == current_q_id:
-                last_perf_entry["evaluation"] = grade # Update the grade
-                last_perf_entry["timestamp"] = datetime.now().isoformat()
-        
-        # Return the MODIFIED full lists
-        return {
-            "messages": [SystemMessage(content=f"Grade (Updated): {grade.upper()}\nFeedback: {feedback}")],
-            "evaluation_report": current_report, # Return the whole list
-            "topic_performance": topic_performance # Return the whole dict
-        }
-        
-    else:
-        print("This is a new question. APPENDING to report.")
-        
-        # --- 1. Create New Evaluation Report Entry ---
-        new_eval_entry = {
-            "question_id": current_q_id,
-            "question": question_msg.content, # This is the first time asking
-            "answer": answer_msg.content,
-            "evaluation": grade,
-            "feedback": feedback,
-            "skill": skill,
-            "timestamp": datetime.now().isoformat(),
-            "topic": topic,
-            "difficulty": difficulty
-        }
-        
-        # --- 2. Create New Topic Performance Entry ---
-        topic_performance[topic].append({
-            "question_id": current_q_id,
-            "evaluation": grade,
-            "difficulty": difficulty,
-            "timestamp": datetime.now().isoformat()
-        })
-        # Keep only last 5
-        topic_performance[topic] = topic_performance[topic][-5:]
 
-        # Return the UPDATED full list by appending the new entry
-        return {
-            "messages": [SystemMessage(content=f"Grade: {grade.upper()}\nFeedback: {feedback}")],
-            "evaluation_report": current_report + [new_eval_entry], # Append and return
-            "topic_performance": topic_performance # Return the whole dict
-        }
-    
-def update_coverage_node(state: InterviewAgentState) -> dict:
-    """Update covered questions (modified to return full list)."""
-    print("--- Node: update_coverage ---")
-    
-    current_id = state.get("current_question_id")
-    if not current_id or current_id in ["NONE", "ERROR", "DONE"]:
+def evaluate_answer_node(state: InterviewAgentState) -> dict:
+    """Grade the answer; a follow-up answer updates the previous question's entry."""
+    pair = _last_question_and_answer(state["messages"])
+    if pair is None or _user_asked_to_stop(state["messages"]):
         return {}
+    question, answer = pair
+    grade, skill, feedback = _grade_answer(question, answer)
+    question_id = state["current_question_id"]
+    topic = state.get("current_question_topic", "general").lower()
+    now = datetime.now().isoformat()
 
-    # Get the full list from state
-    covered = state.get("covered_questions", []).copy()
-    
-    if current_id not in covered:
-        print(f"Covered: {current_id}")
-        covered.append(current_id) # Add to the list
-        return {"covered_questions": covered} # Return the ENTIRE updated list
-    
-    return {} # No changes
+    report = [dict(entry) for entry in state.get("evaluation_report", [])]
+    performance = {t: list(entries) for t, entries in state.get("topic_performance", {}).items()}
+    topic_entries = performance.setdefault(topic, [])
+    is_follow_up = bool(report) and report[-1]["question_id"] == question_id
 
-def decide_action_router(state: InterviewAgentState) -> Literal["ask_follow_up", "get_new_question"]:
-    """
-    Decides whether to ask a follow-up or move to a new question.
-    """
-    print("--- Router: decide_action ---")
-    
+    if is_follow_up:
+        last = report[-1]
+        last.update(evaluation=grade, feedback=feedback, timestamp=now)
+        last["answer"] = f"{last.get('answer', '')}\n[FOLLOW-UP]: {answer}"
+        if topic_entries and topic_entries[-1]["question_id"] == question_id:
+            topic_entries[-1] = {
+                **topic_entries[-1],
+                "evaluation": grade,
+                "timestamp": now,
+            }
+    else:
+        difficulty = state.get("current_question_difficulty", "medium")
+        report.append(
+            {
+                "question_id": question_id, "question": question, "answer": answer,
+                "evaluation": grade, "feedback": feedback, "skill": skill,
+                "timestamp": now, "topic": topic, "difficulty": difficulty,
+            }
+        )  # fmt: skip
+        topic_entries.append(
+            {
+                "question_id": question_id,
+                "evaluation": grade,
+                "difficulty": difficulty,
+                "timestamp": now,
+            }
+        )
+        performance[topic] = topic_entries[-TOPIC_HISTORY_LENGTH:]
+
+    return {
+        "messages": [SystemMessage(content=f"Grade: {grade.upper()}\nFeedback: {feedback}")],
+        "evaluation_report": report,
+        "topic_performance": performance,
+    }
+
+
+def update_coverage_node(state: InterviewAgentState) -> dict:
+    current = state.get("current_question_id")
+    covered = state.get("covered_questions", [])
+    if not current or current in NO_QUESTION_IDS or current in covered:
+        return {}
+    return {"covered_questions": [*covered, current]}
+
+
+def _user_asked_to_stop(messages: list[BaseMessage]) -> bool:
+    last_answer = next((m for m in reversed(messages) if isinstance(m, HumanMessage)), None)
+    return last_answer is not None and str(last_answer.content).lower().strip() in STOP_WORDS
+
+
+def decide_action_router(
+    state: InterviewAgentState,
+) -> Literal["ask_follow_up", "update_coverage"]:
+    if _user_asked_to_stop(state["messages"]) or not state.get("evaluation_report"):
+        return "update_coverage"
+    last = state["evaluation_report"][-1]
+    if last["evaluation"] in GOOD_GRADES:
+        return "update_coverage"
     try:
-        last_eval = state.get("evaluation_report", [])[-1]
-        grade = last_eval["evaluation"].lower()
-        
-        # --- Optimization: ---
-        # If the answer was great, don't waste time/tokens deciding. Just move on.
-        if grade in ["excellent", "good"]:
-            print("Answer was good. Moving to new question.")
-            return "get_new_question"
-        
-        # --- LLM-Powered Choice ---
-        # For "moderate" or "bad" answers, let the LLM decide.
-        question = last_eval["question"]
-        answer = last_eval["answer"]
-        
-        prompt = ACTION_CHOICE_PROMPT.format(question=question, answer=answer, grade=grade)
-        response = llm.invoke(prompt)
-        choice = response.content.upper().strip()
-        
-        if "FOLLOW_UP" in choice:
-            print("LLM decided to ask a follow-up.")
-            return "ask_follow_up"
-        else:
-            print("LLM decided to move on.")
-            return "get_new_question"
-            
-    except Exception as e:
-        print(f"Action router failed: {e}. Defaulting to new question.")
-        return "get_new_question"
+        prompt = ACTION_CHOICE_PROMPT.format(
+            question=last["question"], answer=last["answer"], grade=last["evaluation"]
+        )
+        choice = str(get_llm().invoke(prompt).content).upper()
+    except Exception as error:  # provider errors: default to a new question
+        logger.warning("Follow-up decision failed: %s", error)
+        return "update_coverage"
+    return "ask_follow_up" if "FOLLOW_UP" in choice else "update_coverage"
 
 
-def should_continue_router(state: InterviewAgentState) -> Literal["generate_question", "synthesize_and_update"]:
-    """Route to next node."""
-    print("--- Router: should_continue ---")
-    
-    # Check user stop intent - only in the most recent human message
-    for msg in reversed(state["messages"]):
-        if isinstance(msg, HumanMessage) and msg.name != "Interviewer":
-            content = msg.content.lower().strip() # Get the clean, lowercase content
-            
-            # --- FIX: Check if message *IS* a stop word, not if it *contains* one ---
-            stop_triggers = ["stop", "done", "end", "finish", "quit"]
-            if content in stop_triggers:
-                print("User stop detected")
-                return "synthesize_and_update"
-            # --- END FIX ---
-            
-            break  # Only check the most recent human message
-    
-    # Check termination
-    if state.get("current_question_id") in ["NONE", "ERROR"]:
-        print("No more questions available")
-        return "synthesize_and_update"
-    
-    if state.get("question_count", 0) >= MAX_QUESTIONS_PER_SESSION:
-        print(f"Max questions ({MAX_QUESTIONS_PER_SESSION}) reached")
-        return "synthesize_and_update"
-    
-    print("Continuing...")
-    return "generate_question"
+def should_continue_router(
+    state: InterviewAgentState,
+) -> Literal["generate_question", "synthesize_and_update"]:
+    finished = (
+        _user_asked_to_stop(state["messages"])
+        or state.get("current_question_id") in {"NONE", "ERROR"}
+        or state.get("question_count", 0) >= MAX_QUESTIONS_PER_SESSION
+    )
+    return "synthesize_and_update" if finished else "generate_question"
+
 
 def synthesize_and_update_node(state: InterviewAgentState) -> dict:
-    """Generate final summary."""
-    print("\n" + "="*70)
-    print("INTERVIEW SESSION COMPLETE")
-    print("="*70)
-    
     report = state.get("evaluation_report", [])
     if not report:
         summary = "No questions were answered in this session."
     else:
+        lines = "\n".join(f"- {e['skill']}: {e['evaluation']} | {e['feedback']}" for e in report)
         try:
-            report_str = "\n".join([
-                f"- {e['skill']}: {e['evaluation']} | {e['feedback']}"
-                for e in report
-            ])
-            prompt = SUMMARY_PROMPT.format(report=report_str)
-            summary = llm.invoke(prompt).content
-        except Exception as e:
-            print(f"Summary error: {e}")
+            summary = str(get_llm().invoke(SUMMARY_PROMPT.format(report=lines)).content)
+        except Exception as error:  # provider errors: plain fallback summary
+            logger.warning("Interview summary failed: %s", error)
             summary = f"Completed {len(report)} questions."
-    
-    print("\nFinal Summary:\n")
-    print(summary)
-    
     return {
-        "messages": [SystemMessage(content=f"Interview Complete!\n\n{summary}")],
-        "current_question_id": "DONE"
+        "messages": [SystemMessage(content=f"Interview complete!\n\n{summary}")],
+        "current_question_id": "DONE",
     }
 
-# --- 5. Build Graph ---
-# --- 5. Build Graph ---
-print("\nBuilding LangGraph Graph...")
 
-workflow = StateGraph(InterviewAgentState)
+def build_interview_graph() -> StateGraph:
+    graph = StateGraph(InterviewAgentState)
+    graph.add_node("start_interview", start_interview_node)
+    graph.add_node("generate_question", generate_question_node)
+    graph.add_node("wait_for_answer", wait_for_answer_node)
+    graph.add_node("evaluate_answer", evaluate_answer_node)
+    graph.add_node("ask_follow_up", ask_follow_up_node)
+    graph.add_node("update_coverage", update_coverage_node)
+    graph.add_node("synthesize_and_update", synthesize_and_update_node)
 
-# Add nodes
-workflow.add_node("start_interview", start_interview_node)
-workflow.add_node("generate_question", generate_question_node)
-workflow.add_node("wait_for_answer", wait_for_answer_node) 
-workflow.add_node("evaluate_answer", evaluate_answer_node)
-workflow.add_node("ask_follow_up", ask_follow_up_node) # <-- NEW NODE
-workflow.add_node("update_coverage", update_coverage_node)
-workflow.add_node("synthesize_and_update", synthesize_and_update_node)
+    graph.add_edge(START, "start_interview")
+    graph.add_edge("start_interview", "generate_question")
+    graph.add_edge("generate_question", "wait_for_answer")
+    graph.add_edge("wait_for_answer", "evaluate_answer")
+    graph.add_conditional_edges("evaluate_answer", decide_action_router)
+    graph.add_edge("ask_follow_up", "wait_for_answer")
+    graph.add_conditional_edges("update_coverage", should_continue_router)
+    graph.add_edge("synthesize_and_update", END)
+    return graph
 
-# --- Define flow (NEW WIRING) ---
-workflow.add_edge(START, "start_interview")
-workflow.add_edge("start_interview", "generate_question")
 
-# The main interview loop
-workflow.add_edge("generate_question", "wait_for_answer")
-workflow.add_edge("wait_for_answer", "evaluate_answer")
+@cache
+def get_interview_graph() -> CompiledStateGraph:
+    return build_interview_graph().compile(checkpointer=get_checkpointer())
 
-# --- NEW: Action Router ---
-# After evaluating, decide what to do next
-workflow.add_conditional_edges(
-    "evaluate_answer",
-    decide_action_router, # The new router
-    {
-        "ask_follow_up": "ask_follow_up",         # Path 1: Ask follow-up
-        "get_new_question": "update_coverage"   # Path 2: Move on (update coverage first)
-    }
-)
 
-# The follow-up node loops back to wait for an answer
-workflow.add_edge("ask_follow_up", "wait_for_answer")
+# --- Session API ---
 
-# --- OLD: Continue Router ---
-# This router is now only hit after the agent decides to "get_new_question"
-# Its job is to check for "stop" words and max questions
-workflow.add_conditional_edges(
-    "update_coverage",
-    should_continue_router,
-    {
-        "generate_question": "generate_question",       # Loop back for new question
-        "synthesize_and_update": "synthesize_and_update"  # End session
-    }
-)
 
-workflow.add_edge("synthesize_and_update", END)
+@dataclass(frozen=True)
+class InterviewTurn:
+    """What the candidate sees after each step of the interview."""
 
-# --- 6. Interactive Main Function (REPLACED) ---
+    question: str | None
+    feedback: str | None
+    finished: bool
+    summary: str | None
+    question_count: int
 
-# REPLACE your print_agent_output function with this:
 
-def print_agent_output(messages: List[BaseMessage]):
-    """Finds and prints ONLY the latest AI Interviewer question."""
-    
+def _turn_from(result: dict) -> InterviewTurn:
+    messages = result["messages"]
+    finished = "__interrupt__" not in result
+    last_answer_index = max(
+        (i for i, m in enumerate(messages) if isinstance(m, HumanMessage)), default=-1
+    )
+    since_answer = messages[last_answer_index + 1 :]
+    feedback = next(
+        (
+            m.content
+            for m in since_answer
+            if isinstance(m, SystemMessage) and m.content.startswith("Grade:")
+        ),
+        None,
+    )
     question = None
-    
-    # Search from the end for the newest question
-    for msg in reversed(messages):
-        if isinstance(msg, AIMessage) and msg.name == "Interviewer":
-            question = msg.content
-            break
-            
-    # Print what we found
-    if question:
-        print("\n" + "="*40 + "\nINTERVIEWER\n" + "="*40)
-        print(question)
-
-def prompt_for_choice(prompt: str, choices: List[str]) -> str:
-    """Helper function to get validated user input from a list."""
-    print(f"\n{prompt}")
-    for i, choice in enumerate(choices, 1):
-        print(f"  {i}. {choice}")
-    
-    while True:
-        try:
-            user_input = input(f"Enter number (1-{len(choices)}): ")
-            idx = int(user_input) - 1
-            if 0 <= idx < len(choices):
-                selected = choices[idx]
-                print(f"Selected: {selected}")
-                return selected
-            else:
-                print(f"Invalid choice. Please enter a number between 1 and {len(choices)}.")
-        except ValueError:
-            print("Invalid input. Please enter a number.")
+    if not finished:
+        question = next(
+            (
+                m.content
+                for m in reversed(messages)
+                if isinstance(m, AIMessage) and m.name == INTERVIEWER
+            ),
+            None,
+        )
+    return InterviewTurn(
+        question=question,
+        feedback=feedback,
+        finished=finished,
+        summary=messages[-1].content if finished else None,
+        question_count=result.get("question_count", 0),
+    )
 
 
-# def run_interactive_interview():
-#     """Execute a live, interactive interview session."""
-    
-#     session_id = f"interview_{str(uuid.uuid4())}"
-#     config = {"configurable": {"thread_id": session_id}}
-#     print(f"Starting new interview session: {session_id}")
-    
-#     # --- 1. Get Interview Config ---
-    
-#     # --- MODIFIED: Define topic lists ---
-#     # (Adjust these lists to match your actual topics)
-#     proficient_topics = ["Data Structures & Algorithms", "System Design"]
-#     all_topics = ["Data Structures & Algorithms", "System Design", "Python", "Machine Learning"]
-#     gap_topics = ["Python", "Machine Learning"]
-#     # --- END MODIFIED ---
+def _thread(thread_id: str) -> dict:
+    return {"configurable": {"thread_id": thread_id}}
 
-#     # --- MODIFIED: Prompt for focus ---
-#     focus_choices = ["proficient", "all", "gaps"] # From your state definition
-#     interview_focus = prompt_for_choice("Choose your interview focus:", focus_choices)
-    
-#     topic_list = []
-#     if interview_focus == "proficient":
-#         topic_list = proficient_topics
-#     elif interview_focus == "all":
-#         topic_list = all_topics
-#     elif interview_focus == "gaps":
-#         topic_list = gap_topics
-            
-#     print(f"Topics set: {', '.join(topic_list)}")
-#     # --- END MODIFIED ---
 
-#     # --- MODIFIED: Prompt for company ---
-#     company_choices = ["amazon", "microsoft", "nvidia",  "netflix", "meta", "google", "generic", "all"]
-#     company_focus = prompt_for_choice("Choose your company focus:", company_choices)
-#     # --- END MODIFIED ---
-    
-#     initial_state = {
-#         "user_id": "interactive_user",
-#         "interview_focus": interview_focus, # Set from user input
-#         "company_focus": company_focus,     # Set from user input
-#         "topic_list": topic_list,           # Set from user input
-#         "messages": [],
-#     }
-    
-#     # --- 2. Start Interview (First Invoke) ---
-#     print("\nStarting interview... (Type 'stop' at any time to end)")
-#     # This runs the graph until the first interrupt()
-#     result = interview_agent.invoke(initial_state, config=config)
-    
-#     # Print the first question
-#     print_agent_output(result["messages"])
-    
-#     # --- 3. Interaction Loop ---
-#     # (The rest of this function remains unchanged)
-#     while "__interrupt__" in result:
-#         try:
-#             # Get user input from the command line
-#             user_input = input("\nYour Answer: ")
-            
-#             # Create the payload to resume the graph
-#             resume_payload = {"messages": [HumanMessage(content=user_input)]}
-            
-#             # Resume the graph
-#             result = interview_agent.invoke(Command(resume=resume_payload), config=config)
-            
-#             # Print new output (feedback + new question)
-#             print_agent_output(result["messages"])
-            
-#         except KeyboardInterrupt:
-#             print("\n\nInterview interrupted by user. Ending session.")
-#             break
-#         except Exception as e:
-#             print(f"\nAn error occurred: {e}")
-#             break
-    
-#     # --- 4. Print Final Summary ---
-#     if "__interrupt__" not in result:
-#         print("\n" + "="*50 + "\nINTERVIEW COMPLETE\n" + "="*50)
-#         # The final message is the summary
-#         print(result['messages'][-1].content)
-def run_interactive_interview(
-    user_skills: Optional[List[str]] = None,
-    skill_gaps: Optional[List[str]] = None,
-    target_role: Optional[str] = None,
-    suggested_topics: Optional[List[str]] = None
-):
-    """Execute a live, interactive interview session WITH user context."""
-    
-    session_id = f"interview_{str(uuid.uuid4())}"
-    config = {"configurable": {"thread_id": session_id}}
-    print(f"Starting new interview session: {session_id}")
-    
-    # SHOW USER CONTEXT
-    if target_role:
-        print(f"\nTarget Role: {target_role}")
-    if user_skills:
-        print(f"Your Skills: {len(user_skills)} identified")
-        print(f"  Sample: {', '.join(user_skills[:5])}")
-    if skill_gaps:
-        print(f"Skill Gaps to Address: {len(skill_gaps)}")
-        print(f"  Top gaps: {', '.join(skill_gaps[:5])}")
-    
-    # --- Get Interview Config ---
-    
-    # USE SUGGESTED TOPICS IF PROVIDED
-    if suggested_topics:
-        proficient_topics = suggested_topics
-        all_topics = suggested_topics
-        gap_topics = suggested_topics
-        print(f"\nUsing personalized topics based on your skill analysis:")
-        for i, topic in enumerate(suggested_topics, 1):
-            print(f"  {i}. {topic}")
-    else:
-        # Fallback to defaults
-        proficient_topics = ["Data Structures & Algorithms", "System Design"]
-        all_topics = ["Data Structures & Algorithms", "System Design", "Python", "Machine Learning"]
-        gap_topics = ["Python", "Machine Learning"]
-        print("\nUsing default topics (no context provided)")
-
-    # SMART DEFAULT: Focus on gaps if they exist
-    if skill_gaps and len(skill_gaps) > 3:
-        print("\nTIP: Select 'gaps' to focus on areas that need improvement")
-    
-    focus_choices = ["proficient", "all", "gaps"]
-    interview_focus = prompt_for_choice("\nChoose your interview focus:", focus_choices)
-    
-    topic_list = []
-    if interview_focus == "proficient":
-        topic_list = proficient_topics
-    elif interview_focus == "all":
-        topic_list = all_topics
-    elif interview_focus == "gaps":
-        topic_list = gap_topics
-            
-    print(f"Topics set: {', '.join(topic_list)}")
-
-    company_choices = ["amazon", "microsoft", "nvidia", "netflix", "meta", "google", "generic", "all"]
-    company_focus = prompt_for_choice("\nChoose your company focus:", company_choices)
-    
-    # PASS USER CONTEXT TO INITIAL STATE
-    initial_state = {
-        "user_id": "interactive_user",
-        "interview_focus": interview_focus,
+def start_interview(
+    thread_id: str,
+    topics: list[str],
+    company_focus: str,
+    focus: InterviewFocus = "gaps",
+) -> InterviewTurn:
+    """Begin a session on `thread_id`; returns the first question."""
+    initial = {
+        "interview_focus": focus,
         "company_focus": company_focus,
-        "topic_list": topic_list,
+        "topic_list": topics,
         "messages": [],
-        # Store context for potential use in evaluation
-        "_user_context": {
-            "skills": user_skills or [],
-            "gaps": skill_gaps or [],
-            "role": target_role
-        }
     }
-    
-    # Start Interview (First Invoke)
-    print("\nStarting interview... (Type 'stop' at any time to end)")
-    result = interview_agent.invoke(initial_state, config=config)
-    
-    # Print the first question
-    print_agent_output(result["messages"])
-    
-    # Interaction Loop
-    while "__interrupt__" in result:
-        try:
-            # Get user input
-            user_input = input("\nYour Answer: ")
-            
-            # Create resume payload
-            resume_payload = {"messages": [HumanMessage(content=user_input)]}
-            
-            # Resume the graph
-            result = interview_agent.invoke(Command(resume=resume_payload), config=config)
-            
-            # Print new output
-            print_agent_output(result["messages"])
-            
-        except KeyboardInterrupt:
-            print("\n\nInterview interrupted by user. Ending session.")
-            break
-        except Exception as e:
-            print(f"\nAn error occurred: {e}")
-            break
-    
-    # Print Final Summary
-    if "__interrupt__" not in result:
-        print("\n" + "="*50 + "\nINTERVIEW COMPLETE\n" + "="*50)
-        print(result['messages'][-1].content)
+    return _turn_from(get_interview_graph().invoke(initial, config=_thread(thread_id)))
 
-# Initialize interview agent at module level for import
-# Initialize interview agent at module level for import
-try:
-    # 1. create a psycopg connection
-    pg_conn = psycopg.connect(DB_URL)
 
-    # 2. create PostgresSaver with the psycopg connection
-    interview_checkpointer = PostgresSaver(pg_conn)
+def submit_answer(thread_id: str, answer: str) -> InterviewTurn:
+    """Resume the paused session with the candidate's answer ('stop' ends it)."""
+    resume = Command(resume={"messages": [HumanMessage(content=answer)]})
+    return _turn_from(get_interview_graph().invoke(resume, config=_thread(thread_id)))
 
-    # 3. compile agent with checkpointer
-    interview_agent = workflow.compile(checkpointer=interview_checkpointer)
 
-    print("✅ Interview agent compiled WITH PostgresSaver + psycopg connection")
-
-except Exception as e:
-    import traceback
-    print("❌ Failed to initialize Postgres checkpointer!")
-    traceback.print_exc()
-
-    interview_checkpointer = None
-    interview_agent = workflow.compile()
-    print("⚠ Running WITHOUT checkpointer (resume will NOT work!)")
-
-print("CHECKPOINTER USED:", interview_agent.checkpointer)
-if __name__ == "__main__":
-    run_interactive_interview()
+def evaluation_report(thread_id: str) -> list[dict]:
+    snapshot = get_interview_graph().get_state(_thread(thread_id))
+    return snapshot.values.get("evaluation_report", [])
