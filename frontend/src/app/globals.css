@@ -1,0 +1,19 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Background theme */
+body {
+  background: radial-gradient(circle at 20% 20%, rgba(255, 0, 182, 0.15), transparent 60%),
+              radial-gradient(circle at 80% 80%, rgba(148, 0, 255, 0.1), transparent 50%),
+              #07060a;
+  color: white;
+}
+
+/* Glass effect */
+.glass {
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(14px);
+  border-radius: 16px;
+}

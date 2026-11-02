@@ -1,0 +1,261 @@
+#TOPIC: Data Structures & Algorithms
+
+#DIFFICULTY: Easy
+What is the difference between a linked list and an array?
+---
+How do you implement a stack using a linked list?
+---
+How do you implement a bubble sort algorithm?
+---
+Implement a binary search on a sorted array.
+---
+Reverse a string or linked list.
+---
+Determine if an array contains duplicates.
+---
+
+#DIFFICULTY: Medium
+Find the longest substring without repeating characters.
+---
+Merge two sorted linked lists or arrays.
+---
+Find all pairs in an array that sum to a given number.
+---
+Use hash tables to solve search and frequency problems.
+---
+Implement and use recursion for classic problems (factorial, Fibonacci).
+---
+Write an in-order traversal for a binary tree.
+---
+
+#DIFFICULTY: Hard
+Implement a Least Frequently Used (LFU) cache.
+---
+Design a system to track the K most common queries.
+---
+Find all triplets in an array that sum to zero.
+---
+Design dynamic programming solutions (longest palindromic subsequence, coin change).
+---
+Calculate edit distance between two strings.
+---
+Find strongly connected components in a directed graph.
+
+#TOPIC: System Design
+
+#DIFFICULTY: Medium
+Design a library system serving both online and offline users.
+---
+Design a notification system that can handle high-volume concurrent messages.
+---
+Design a distributed cache for fast, reliable storage retrieval.
+---
+Design a feature for Microsoft Teams targeting university students in Japan.
+---
+Design a social media platform from scratch.
+---
+
+#DIFFICULTY: Hard
+Design a website capable of handling world-scale traffic.
+---
+Architect a scalable microservice for handling real-time transactions (API structure, data storage, fault tolerance).
+---
+Design a distributed file system for massive data volumes.
+---
+Design a search engine for multi-lingual queries.
+
+#TOPIC: Databases & Data Engineering
+
+#DIFFICULTY: Easy
+What are SQL joins?
+---
+What is normalization and why is it important?
+---
+What are the differences between SQL and NoSQL databases?
+---
+
+#DIFFICULTY: Medium
+How do you optimize a slow-performing database?
+---
+What is sharding and partitioning, and how does it help scale databases?
+---
+What is Azure Data Factory, and what are its main pipeline components?
+---
+How do you use triggers and control flow in ETL pipelines?
+---
+
+#DIFFICULTY: Hard
+Design a data platform to process billions of transactions daily.
+---
+Architect a secure, high-throughput data warehouse (Azure Synapse/Data Lake).
+---
+How do you troubleshoot a failed Spark job in Microsoft Fabric or Databricks?
+---
+Plan disaster recovery and backup for an enterprise-scale database.
+
+#TOPIC: Cloud & Infrastructure (Azure, DevOps, SRE)
+
+#DIFFICULTY: Easy
+What are the core components of Microsoft Azure?
+---
+What is the difference between a VM and a container?
+---
+What is resource scaling and auto-scaling in the cloud?
+---
+
+#DIFFICULTY: Medium
+Explain how you’d configure CDN and geo-redundancy for a web app on Azure.
+---
+Describe best practices for security in Azure Data Factory and ADLS.
+---
+What’s the difference between synchronous and asynchronous programming?
+---
+
+#DIFFICULTY: Hard
+Design a disaster recovery plan for a global Azure deployment.
+---
+Architect a multi-region failover and high-availability system.
+---
+Build an infrastructure-as-code pipeline with Terraform or Azure Resource Manager.
+
+#TOPIC: Machine Learning & Data Science
+
+#DIFFICULTY: Easy
+What are the basic types of machine learning algorithms?
+---
+How do you handle missing values in a dataset?
+---
+
+#DIFFICULTY: Medium
+Describe the typical steps for developing a model in Azure Machine Learning Studio.
+---
+How would you evaluate a model’s performance (AUC, precision, recall)?
+---
+Write SQL queries for basic feature engineering.
+---
+
+#DIFFICULTY: Hard
+Architect a scalable pipeline for real-time recommendations in Microsoft Store.
+---
+Describe distributed model training and serving in production (Azure ML, Databricks).
+
+#TOPIC: Security & Networking
+
+#DIFFICULTY: Easy
+What is the purpose of a firewall?
+---
+What is a DNS server, and how does it work?
+---
+What is HTTPS? Why is it important for web applications?
+---
+
+#DIFFICULTY: Medium
+Implement or explain API rate limiting.
+---
+Describe network security strategies for cloud services (private link, role-based access).
+---
+How do you debug high-latency issues in distributed systems?
+---
+
+#DIFFICULTY: Hard
+Design a secure API gateway for enterprise services.
+---
+Plan multi-level authentication and RBAC for a cloud application.
+---
+Architect a distributed lock manager for resource contention.
+
+#TOPIC: Coding (All Languages)
+
+#DIFFICULTY: Easy
+Implement a function to add two numbers.
+---
+Find the length of the last word in a string.
+---
+
+#DIFFICULTY: Medium
+Implement quicksort or mergesort from scratch.
+---
+Validate a binary search tree given its root node.
+---
+
+#DIFFICULTY: Hard
+Implement maximum subarray sum (Kadane’s algorithm).
+---
+Construct a Trie and solve prefix-based search tasks.
+
+#TOPIC: Behavioral & Leadership
+
+#Relevant at All Levels
+Why Microsoft? What appeals to you about our culture and products?
+---
+Tell me how you handled a disagreement on a technical decision.
+---
+Describe a time you shipped a product on a tight schedule.
+---
+Explain how you iterated based on user feedback.
+---
+Give an example of cross-team collaboration.
+
+#TOPIC: Product Management
+
+#Relevant for PM roles
+What is your favorite Microsoft product? How would you improve it?
+---
+Define a strategy to grow usage for Microsoft Office on mobile.
+---
+How would you add a food ordering feature to Excel?
+---
+How do you prioritize engineering requests versus user feedback?
+---
+Describe the Waterfall versus Agile techniques.
+---
+How do you define and track product KPIs?
+---
+
+#DIFFICULTY: PM-Specific
+Describe your approach for launching a new feature in Teams or Office.
+---
+How would you discontinue a product or feature that underperforms?
+---
+How would you build an MLP (minimum loveable product) for a new AI tool?
+---
+How would you conduct a competitive analysis for a new cloud service?
+
+#TOPIC: Testing, QA, and Automation
+
+#DIFFICULTY: Easy
+What is unit testing? How do you use it?
+---
+What is test automation, and why is it important?
+---
+
+#DIFFICULTY: Medium
+How do you design and implement an automated integration test pipeline?
+---
+How do you monitor and verify the reliability of microservices?
+---
+
+#DIFFICULTY: Hard
+Design a test framework for distributed systems.
+
+#TOPIC: UI/UX & Frontend
+
+#DIFFICULTY: Medium
+Describe the role of React or Blazor in building large-scale SPAs.
+---
+How would you ensure accessibility and localization across Microsoft’s products?
+---
+
+#DIFFICULTY: Hard
+Implement a custom component library used across multiple enterprise apps.
+
+#TOPIC: Frameworks & Tools
+
+#DIFFICULTY: All levels
+How would you use .NET for scalable service design at Microsoft?
+---
+Discuss Power Platform (Power Apps, Power BI) for rapid enterprise solutions.
+---
+What is Databricks, and how does it fit into Microsoft’s cloud AI ecosystem?
+---
+How do you leverage Microsoft Graph API for organizational data integration?
