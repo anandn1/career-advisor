@@ -1,0 +1,210 @@
+[
+  {
+    "id": "101",
+    "title": "Introduction to Python",
+    "prereqs": [],
+    "difficulty": 1,
+    "topics": [
+      "Python",
+      "Beginner"
+    ],
+    "url": "https://www.codecademy.com/learn/learn-python-3",
+    "description": "Python basics for beginners."
+  },
+  {
+    "id": "205",
+    "title": "Advanced FastAPI",
+    "prereqs": [
+      101
+    ],
+    "difficulty": 4,
+    "topics": [
+      "Python",
+      "Web Development",
+      "FastAPI",
+      "API"
+    ],
+    "url": "https://testdriven.io/courses/fastapi/",
+    "description": "Deep dive into FastAPI framework."
+  },
+  {
+    "id": "206",
+    "title": "FastAPI for Beginners",
+    "prereqs": [
+      101
+    ],
+    "difficulty": 2,
+    "topics": [
+      "Python",
+      "Web Development",
+      "FastAPI",
+      "API"
+    ],
+    "url": "https://fastapi.tiangolo.com/tutorial/",
+    "description": "Get started with FastAPI."
+  },
+  {
+    "id": "303",
+    "title": "Data Science with Pandas",
+    "prereqs": [
+      101
+    ],
+    "difficulty": 3,
+    "topics": [
+      "Python",
+      "Machine Learning",
+      "Pandas",
+      "Data Analysis"
+    ],
+    "url": "https://www.datacamp.com/courses/pandas-foundations",
+    "description": "Pandas for data analysis."
+  },
+  {
+    "id": "501",
+    "title": "PostgreSQL: SQL & Database Management",
+    "prereqs": [],
+    "difficulty": 3,
+    "topics": [
+      "Database",
+      "PostgreSQL",
+      "SQL"
+    ],
+    "url": "https://www.postgresql.org/docs/current/tutorial.html",
+    "description": "Learn SQL and Postgres."
+  },
+  {
+    "id": "502",
+    "title": "Advanced SQL for Data Scientists",
+    "prereqs": [
+      501
+    ],
+    "difficulty": 4,
+    "topics": [
+      "Database",
+      "PostgreSQL",
+      "SQL"
+    ],
+    "url": "https://mode.com/sql-tutorial/",
+    "description": "Complex SQL queries."
+  },
+  {
+    "id": "700",
+    "title": "LangChain for LLM App Development",
+    "prereqs": [
+      101
+    ],
+    "difficulty": 4,
+    "topics": [
+      "Python",
+      "LangChain",
+      "AI",
+      "LLM"
+    ],
+    "url": "https://python.langchain.com/docs/get_started/introduction",
+    "description": "Build LLM applications."
+  },
+  {
+    "id": "701",
+    "title": "LangChain & Vector Databases",
+    "prereqs": [
+      101,
+      700
+    ],
+    "difficulty": 5,
+    "topics": [
+      "Python",
+      "LangChain",
+      "AI",
+      "LLM",
+      "Database"
+    ],
+    "url": "https://python.langchain.com/docs/modules/data_connection/",
+    "description": "LangChain with Chroma/Pinecone."
+  },
+  {
+    "id": "800",
+    "title": "Docker & Kubernetes",
+    "prereqs": [
+      101
+    ],
+    "difficulty": 4,
+    "topics": [
+      "Deployment",
+      "Docker",
+      "Kubernetes",
+      "DevOps"
+    ],
+    "url": "https://www.docker.com/get-started",
+    "description": "Containerization and orchestration."
+  },
+  {
+    "id": "801",
+    "title": "AWS Cloud Practitioner",
+    "prereqs": [],
+    "difficulty": 2,
+    "topics": [
+      "Cloud",
+      "AWS",
+      "DevOps"
+    ],
+    "url": "https://aws.amazon.com/training/",
+    "description": "AWS fundamentals."
+  },
+  {
+    "id": "802",
+    "title": "AWS Solutions Architect",
+    "prereqs": [
+      801
+    ],
+    "difficulty": 4,
+    "topics": [
+      "Cloud",
+      "AWS",
+      "Architecture"
+    ],
+    "url": "https://aws.amazon.com/certification/certified-solutions-architect-associate/",
+    "description": "Design scalable AWS systems."
+  },
+  {
+    "id": "900",
+    "title": "React.js Complete Guide",
+    "prereqs": [],
+    "difficulty": 3,
+    "topics": [
+      "React",
+      "JavaScript",
+      "Frontend",
+      "Web Development"
+    ],
+    "url": "https://react.dev/learn",
+    "description": "Master React fundamentals."
+  },
+  {
+    "id": "901",
+    "title": "Angular for Beginners",
+    "prereqs": [],
+    "difficulty": 3,
+    "topics": [
+      "Angular",
+      "TypeScript",
+      "Frontend",
+      "Web Development"
+    ],
+    "url": "https://angular.io/tutorial",
+    "description": "Get started with Angular."
+  },
+  {
+    "id": "902",
+    "title": "Vue.js Essentials",
+    "prereqs": [],
+    "difficulty": 2,
+    "topics": [
+      "Vue",
+      "JavaScript",
+      "Frontend",
+      "Web Development"
+    ],
+    "url": "https://vuejs.org/guide/quick-start.html",
+    "description": "Learn Vue.js basics."
+  }
+]

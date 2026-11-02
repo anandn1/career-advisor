@@ -19,3 +19,4 @@ report_session_*.txt
 
 # Internal planning docs
 architect-plan.md
+backend/data/

@@ -4,7 +4,7 @@
 
 The **Agentic AI Career Advisor** is an intelligent system designed to provide end-to-end career support. Powered by **Groq** for high-speed inference and **LangGraph** for stateful multi-agent orchestration, the application deploys a team of specialized AI agents to analyze job markets, craft resumes, and prepare candidates for interviews.
 
-> **Current Status:** This project is currently a **Command Line Interface (CLI)** application. A full web interface (FastAPI + React) is in development.
+> **Current Status:** The agents run from a terminal front-end. A web interface (FastAPI + Next.js) and Docker deployment are in development.
 
 ## System Architecture
 
@@ -36,88 +36,72 @@ graph TD
   * **LLM Engine:** Groq (Llama 3 / Mixtral for near-instant inference)
   * **Embeddings:** Google EmbeddingGemma 300M (Running locally via SentenceTransformers)
   * **Framework:** Python, LangChain
-  * **Database:** PostgreSQL (with SQLAlchemy)
+  * **Database:** PostgreSQL (SQLAlchemy + Alembic; LangGraph checkpoints)
   * **Vector Store:** ChromaDB (for RAG capabilities)
 
 ## Installation & Setup
 
 ### Prerequisites
 
-  * Python 3.10+
-  * PostgreSQL installed and running
-  * A Groq API Key
+  * [uv](https://docs.astral.sh/uv/) (installs Python 3.12 for you)
+  * PostgreSQL
+  * A Groq API key, and a Hugging Face token with access to `google/embeddinggemma-300m`
+  * Optional: Cohere (reranking), Tavily (course search) and GitHub (rate limits) keys
+  * Optional: TeX Live (`pdflatex`) to compile resumes to PDF; without it you get the `.tex` file
 
-### 1\. Clone the Repository
+### 1. Clone and install
 
 ```bash
 git clone https://github.com/anandn1/career-advisor.git
-cd career-advisor
+cd career-advisor/backend
+uv sync
 ```
 
-### 2\. Create Virtual Environment
+The first run downloads the EmbeddingGemma weights (about 300 MB).
+
+### 2. Configure
+
+Copy `.env.example` to `.env` in the repository root and fill in at least `GROQ_API_KEY` and `DATABASE_URL`.
+
+### 3. Prepare the databases (from `backend/`)
 
 ```bash
-python -m venv venv
-
-# On Linux/Mac:
-source venv/bin/activate
-
-# On Windows:
-# venv\Scripts\activate
-```
-
-### 3\. Install Dependencies
-
-```bash
-pip install -r backend/requirements.txt
-```
-
-> **Note:** This will install `sentence-transformers` and `langchain-huggingface`. The first run may take a moment to download the EmbeddingGemma model weights (approx. 300MB).
-
-### 4\. Environment Configuration
-
-Create a `.env` file in the `backend/` directory:
-
-```env
-GROQ_API_KEY=gsk_your_groq_key_here
-DATABASE_URL=postgresql://user:password@localhost:5432/career_db
-# Note: No API key needed for Embeddings as they run locally.
+uv run alembic upgrade head                              # Postgres tables
+uv run python -m app.db.seed_templates                   # resume templates
+uv run python -m app.agents.ingestion.seed_interview_db  # interview question store
 ```
 
 ## Usage
 
-To start the CLI application, execute the Supervisor Agent module from the root directory.
+Start the terminal front-end from `backend/`:
 
 ```bash
-python -m backend.app.agents.supervisor_agent
+uv run python -m app.cli
 ```
 
-**How to interact:**
-
-1.  The Supervisor will initialize and request your **Target Job Role**.
-2.  It will ask for your **Profile Details** (skills, experience, etc.).
-3.  The system will automatically route your request to the **Analyst**, **Strategist**, or **Coach** agents to generate the necessary advice.
+It asks for your target role, location and a resume file or GitHub username, then accepts commands: `jobs`, `learn`, `resume`, `interview`, `skills`, `report` and `exit`. Generated resumes and reports are saved in `backend/data/outputs/`.
 
 ## Project Structure
 
 ```text
-career-advisor/
-├── backend/
-│   ├── app/
-│   │   ├── agents/          # Agent logic (Supervisor, Analyst, Coach, etc.)
-│   │   ├── core/            # Configuration and Utils
-│   │   └── models/          # Database models
-│   ├── requirements.txt
-│   └── .env
-├── notebook/                # Experimental Jupyter notebooks
-└── README.md
+backend/
+├── app/
+│   ├── agents/      # LangGraph agents: skills, job market, curriculum, resume, interview
+│   ├── core/        # settings, shared LLM/embeddings/vector stores, checkpointer
+│   ├── services/    # job scraper, GitHub client, document reading, LaTeX compile
+│   ├── db/          # SQLAlchemy models, queries, template seeding
+│   └── cli.py       # terminal front-end
+├── migrations/      # Alembic migrations
+├── templates/       # reference LaTeX resume templates
+└── pyproject.toml
+docs/                # SRS and architecture diagram
 ```
 
 ## Roadmap
 
   - [x] Core Agentic Workflow (CLI) with LangGraph
   - [x] Integration of Local Embeddings (Gemma 300M)
-  - [ ] Web Interface Development: Migrating to a React Frontend + FastAPI Backend.
+  - [ ] Web interface: FastAPI backend + Next.js frontend
   - [ ] Database integration for persistent user history.
   - [ ] Enhanced error handling and retry mechanisms.
 

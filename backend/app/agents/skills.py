@@ -1,402 +1,60 @@
-import os
-import sys
-import requests
-import base64
-from pprint import pprint
-from dotenv import load_dotenv
+"""Extracts a user's technical skills from a resume file or a GitHub profile."""
 
-# Add parent directory to path for imports
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import logging
+from pathlib import Path
 
-# Optional imports with fallbacks
-try:
-    from openai import OpenAI
-    OPENAI_AVAILABLE = True
-except ImportError:
-    OPENAI_AVAILABLE = False
-    OpenAI = None
+from langchain_core.messages import HumanMessage, SystemMessage
 
-try:
-    import pdfplumber
-    PDFPLUMBER_AVAILABLE = True
-except ImportError:
-    PDFPLUMBER_AVAILABLE = False
-    pdfplumber = None
+from app.core.resources import get_llm
+from app.services import github
+from app.services.documents import read_document_text
+from app.services.job_scraper import extract_skills as match_known_skills
 
-try:
-    from docx import Document
-    DOCX_AVAILABLE = True
-except ImportError:
-    DOCX_AVAILABLE = False
-    Document = None
+logger = logging.getLogger(__name__)
 
-try:
-    import PyPDF2
-    PYPDF2_AVAILABLE = True
-except ImportError:
-    PYPDF2_AVAILABLE = False
-    PyPDF2 = None
+RESUME_SYSTEM_PROMPT = """You are an expert tech recruiter and skill extractor.
+Read the resume and extract all relevant technical skills: programming languages,
+frameworks, databases, tools and technical concepts.
+Return only a single comma-separated list, with no explanation, categories or preamble."""
 
-# Try to import Groq LLM from settings as fallback
-try:
-    from settings import llm as groq_llm
-    GROQ_LLM_AVAILABLE = True
-except ImportError:
-    GROQ_LLM_AVAILABLE = False
-    groq_llm = None
+GITHUB_SYSTEM_PROMPT = """You are an expert tech skill extractor.
+Create one deduplicated list of technical skills from two sources:
+1. Repo languages: languages detected in the user's code.
+2. Profile README: the user's self-described profile.
+Return only a single comma-separated list, with no explanation, categories or preamble."""
 
-load_dotenv()
 
-GITHUB_ACCESS_TOKEN = os.environ.get('GITHUB_ACCESS_TOKEN')
-HF_TOKEN = os.environ.get('HF_TOKEN')
+def _parse_skill_list(text: str) -> list[str]:
+    skills = (skill.strip().strip("'\"") for skill in text.split(","))
+    return sorted({skill for skill in skills if skill}, key=str.lower)
 
-# Initialize OpenAI client only if available
-client = None
-if OPENAI_AVAILABLE and HF_TOKEN:
+
+def _ask_llm_for_skills(system_prompt: str, user_prompt: str) -> list[str] | None:
+    """Ask the LLM for a comma-separated skill list; None if the call fails."""
     try:
-        client = OpenAI(
-            base_url="https://router.huggingface.co/v1",
-            api_key=HF_TOKEN,
+        reply = get_llm().invoke(
+            [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
         )
-    except Exception as e:
-        print(f"⚠️  Warning: Could not initialize OpenAI client: {e}")
-        client = None
-
-
-def get_github_repo_languages(username: str, token: str = None) -> list[str]:
-    """
-    Fetches all unique languages (skills) used in a user's public repos.
-    """
-    headers = {}
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-
-    repos_url = f"https://api.github.com/users/{username}/repos?per_page=100"
-    response = requests.get(repos_url, headers=headers)
-
-    if response.status_code != 200:
-        print(f"Error: Could not fetch repo list. Status code: {response.status_code}")
-        return []
-
-    repos = response.json()
-    all_languages = set()
-
-    for repo in repos:
-        lang_url = repo['languages_url']
-        lang_response = requests.get(lang_url, headers=headers)
-        
-        if lang_response.status_code == 200:
-            languages = lang_response.json()
-            for lang in languages.keys():
-                all_languages.add(lang)
-        else:
-            pass
-
-    return list(all_languages)
-
-def get_readme_content(username: str, token: str = None) -> str | None:
-    """
-    Fetches the raw text content of a user's profile README.md.
-    """
-    headers = {}
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-
-    readme_url = f"https://api.github.com/repos/{username}/{username}/contents/README.md"
-    response = requests.get(readme_url, headers=headers)
-
-    if response.status_code == 404:
-        print(f"Info: User {username} does not have a profile README.")
+    except Exception as error:  # network/auth/rate-limit errors from the provider
+        logger.warning("Skill extraction LLM call failed: %s", error)
         return None
-        
-    if response.status_code != 200:
-        print(f"Error: Could not fetch README. Status code: {response.status_code}")
-        return None
-
-    try:
-        content_base64 = response.json()['content']
-        decoded_bytes = base64.b64decode(content_base64)
-        readme_text = decoded_bytes.decode('utf-8')
-        return readme_text
-    except Exception as e:
-        print(f"Error decoding README content: {e}")
-        return None
-
-def get_combined_skills_llm(
-    repo_languages: list[str], 
-    readme_text: str | None, 
-) -> set[str]:
-    """
-    Extracts skills from repo languages and README using LLM.
-    Uses OpenAI client if available, otherwise falls back to Groq LLM.
-    """
-    lang_string = ", ".join(repo_languages)
-    
-    if not readme_text:
-        readme_text = "No README content provided."
-
-    system_prompt = """You are an expert tech skill extractor.
-Your task is to create one single, deduplicated list of technical skills.
-
-You must use two sources of information:
-1.  **Repo Languages:** A list of languages found in the user's code.
-2.  **Profile README:** The user's self-described profile.
-
-Combine both sources to create a final, clean list of all unique skills.
-Return *only* a single, simple, comma-separated list.
-Do not add any explanation, categories, or preamble."""
-
-    user_prompt = f"""Here is the data:
-Repo Languages: "{lang_string}"
-Profile README: "{readme_text}"
-"""
-
-    generated_text = None
-    
-    # Try OpenAI client first (if available)
-    if client is not None:
-        try:
-            completion = client.chat.completions.create(
-                model="meta-llama/Meta-Llama-3-8B-Instruct",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                temperature=0.1,
-                max_tokens=200
-            )
-            generated_text = completion.choices[0].message.content
-        except Exception as e:
-            print(f"⚠️  Error calling OpenAI client: {e}. Trying Groq LLM...")
-            generated_text = None
-    
-    # Fallback to Groq LLM
-    if generated_text is None and GROQ_LLM_AVAILABLE and groq_llm is not None:
-        try:
-            from langchain_core.messages import SystemMessage, HumanMessage
-            messages = [
-                SystemMessage(content=system_prompt),
-                HumanMessage(content=user_prompt)
-            ]
-            response = groq_llm.invoke(messages)
-            generated_text = response.content
-        except Exception as e:
-            print(f"⚠️  Error calling Groq LLM: {e}")
-            generated_text = None
-    
-    # If no LLM available, return languages as skills
-    if generated_text is None:
-        print("⚠️  No LLM available. Using repo languages as skills.")
-        return set(repo_languages)
-    
-    # Parse the response
-    try:
-        skill_list = [
-            skill.strip().strip("'\"") 
-            for skill in generated_text.split(',')
-        ]
-        return set(skill for skill in skill_list if skill)
-    except Exception as e:
-        print(f"⚠️  Error parsing LLM response: {e}. Using repo languages as fallback.")
-        return set(repo_languages)
-
-def read_resume_file(file_path: str) -> str | None:
-    """
-    Reads a resume file (.pdf, .docx, .txt) and returns its text.
-    """
-    print(f"\n[RESUME PARSER] Reading resume from: {file_path}")
-    try:
-        if file_path.endswith(".pdf"):
-            text = ""
-            # Try pdfplumber first
-            if PDFPLUMBER_AVAILABLE and pdfplumber is not None:
-                try:
-                    with pdfplumber.open(file_path) as pdf:
-                        for page in pdf.pages:
-                            text += page.extract_text() + "\n"
-                    if text.strip():
-                        print(f"[RESUME PARSER] Extracted {len(text)} characters from resume")
-                        return text
-                except Exception as e:
-                    print(f"⚠️  pdfplumber failed: {e}. Trying PyPDF2...")
-            
-            # Fallback to PyPDF2
-            if PYPDF2_AVAILABLE and PyPDF2 is not None:
-                try:
-                    with open(file_path, 'rb') as file:
-                        pdf_reader = PyPDF2.PdfReader(file)
-                        for page in pdf_reader.pages:
-                            text += page.extract_text() + "\n"
-                    if text.strip():
-                        print(f"[RESUME PARSER] Extracted {len(text)} characters from resume")
-                        return text
-                except Exception as e:
-                    print(f"⚠️  PyPDF2 failed: {e}")
-            
-            if not text.strip():
-                print(f"⚠️  Could not extract text from PDF: {file_path}")
-                return None
-            return text
-        
-        elif file_path.endswith(".docx"):
-            if DOCX_AVAILABLE and Document is not None:
-                doc = Document(file_path)
-                text = "\n".join([para.text for para in doc.paragraphs])
-                print(f"[RESUME PARSER] Extracted {len(text)} characters from resume")
-                return text
-            else:
-                print("⚠️  Error: python-docx not installed. Cannot read .docx files.")
-                return None
-        
-        elif file_path.endswith(".txt"):
-            with open(file_path, 'r', encoding='utf-8') as file:
-                text = file.read()
-            print(f"[RESUME PARSER] Extracted {len(text)} characters from resume")
-            return text
-
-        else:
-            print(f"Error: Unsupported file format: {file_path}")
-            return None
-            
-    except Exception as e:
-        print(f"Error reading file {file_path}: {e}")
-        return None
-
-def extract_skills_from_resume(resume_text: str) -> set[str]:
-    """
-    Extracts skills from resume text using LLM.
-    Uses OpenAI client if available, otherwise falls back to Groq LLM.
-    """
-    system_prompt = """You are an expert tech recruiter and skill extractor.
-Your task is to read a resume and extract all relevant technical skills from the given resume.
-Focus on programming languages, frameworks, databases, tools, and technical concepts.
-Return *only* a single, simple, comma-separated list.
-Do not add any explanation, categories, or preamble."""
-
-    user_prompt = f"Here is the resume text:\n\n{resume_text}"
-
-    generated_text = None
-    
-    # Try OpenAI client first (if available)
-    if client is not None:
-        try:
-            completion = client.chat.completions.create(
-                model="meta-llama/Meta-Llama-3-8B-Instruct",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                temperature=0.1,
-                max_tokens=300
-            )
-            generated_text = completion.choices[0].message.content
-        except Exception as e:
-            print(f"⚠️  Error calling OpenAI client: {e}. Trying Groq LLM...")
-            generated_text = None
-    
-    # Fallback to Groq LLM
-    if generated_text is None and GROQ_LLM_AVAILABLE and groq_llm is not None:
-        try:
-            from langchain_core.messages import SystemMessage, HumanMessage
-            messages = [
-                SystemMessage(content=system_prompt),
-                HumanMessage(content=user_prompt)
-            ]
-            response = groq_llm.invoke(messages)
-            generated_text = response.content
-        except Exception as e:
-            print(f"⚠️  Error calling Groq LLM: {e}")
-            generated_text = None
-    
-    # If no LLM available, use pattern matching fallback
-    if generated_text is None:
-        print("⚠️  No LLM available. Using pattern matching to extract skills.")
-        common_skills = {
-            'python', 'javascript', 'java', 'c++', 'c#', 'php', 'ruby', 'go', 'rust',
-            'typescript', 'swift', 'kotlin', 'scala', 'r', 'matlab', 'perl',
-            'html', 'css', 'react', 'vue', 'angular', 'node.js', 'express', 'django',
-            'flask', 'fastapi', 'spring', 'sql', 'mysql', 'postgresql', 'mongodb',
-            'redis', 'aws', 'azure', 'gcp', 'docker', 'kubernetes', 'git', 'github'
-        }
-        resume_lower = resume_text.lower()
-        found_skills = set()
-        for skill in common_skills:
-            if skill.lower() in resume_lower:
-                found_skills.add(skill.title())
-        return found_skills
-    
-    # Parse the response
-    try:
-        skill_list = [
-            skill.strip().strip("'\"") 
-            for skill in generated_text.split(',')
-        ]
-        skills_set = set(skill for skill in skill_list if skill)
-        print(f"[RESUME PARSER] Found {len(skills_set)} skills: {', '.join(sorted(skills_set))}")
-        return skills_set
-    except Exception as e:
-        print(f"⚠️  Error parsing LLM response: {e}. Using pattern matching fallback.")
-        common_skills = {
-            'python', 'javascript', 'java', 'c++', 'c#', 'php', 'ruby', 'go', 'rust',
-            'typescript', 'swift', 'kotlin', 'scala', 'r', 'matlab', 'perl',
-            'html', 'css', 'react', 'vue', 'angular', 'node.js', 'express', 'django',
-            'flask', 'fastapi', 'spring', 'sql', 'mysql', 'postgresql', 'mongodb',
-            'redis', 'aws', 'azure', 'gcp', 'docker', 'kubernetes', 'git', 'github'
-        }
-        resume_lower = resume_text.lower()
-        found_skills = set()
-        for skill in common_skills:
-            if skill.lower() in resume_lower:
-                found_skills.add(skill.title())
-        return found_skills
+    return _parse_skill_list(str(reply.content))
 
 
-# main function
-def get_final_skills_data(username: str = None, resume_file_path: str = None) -> set[str]:
-    """
-    Main orchestrator to get skills from either a resume file or GitHub.
-    """
-    final_skills = set()
-
-    if resume_file_path:
-        print(f"\n[SKILL EXTRACTION] Processing Resume: {resume_file_path}")
-        resume_text = read_resume_file(resume_file_path)
-        
-        if resume_text:
-            final_skills = extract_skills_from_resume(resume_text)
-        else:
-            print(f"Could not process resume file: {resume_file_path}")
-    elif username:
-        print(f"\n[SKILL EXTRACTION] Processing GitHub User: {username}")
-        
-        if not GITHUB_ACCESS_TOKEN:
-            print("Warning: GITHUB_TOKEN not set. You may hit rate limits.\n")
-    
-        repo_langs = get_github_repo_languages(username, GITHUB_ACCESS_TOKEN)
-    
-        if not repo_langs:
-            print("No languages found in user's repos")
-
-        readme_content = get_readme_content(username, GITHUB_ACCESS_TOKEN)
-    
-        final_skills = get_combined_skills_llm(repo_langs, readme_content)
-    else:
-        print("Error: Either username or resume_file_path must be provided")
-    
-    return final_skills
+def extract_skills_from_text(resume_text: str) -> list[str]:
+    llm_skills = _ask_llm_for_skills(
+        RESUME_SYSTEM_PROMPT, f"Here is the resume text:\n\n{resume_text}"
+    )
+    return llm_skills if llm_skills is not None else match_known_skills(resume_text)
 
 
-if __name__ == "__main__":
-    if not HF_TOKEN and not GROQ_LLM_AVAILABLE:
-        print("Error: Neither HF_TOKEN nor Groq LLM available. Skill extraction will be limited.\n")
-    
-    USERNAME_TO_FETCH = "Satyajeet-Das" 
-    RESUME_FILE_PATH = None
-    
-    skills = get_final_skills_data(USERNAME_TO_FETCH, RESUME_FILE_PATH)
-    
-    if skills:
-        print("\n✅ Extracted Skills:")
-        pprint(sorted(list(skills)))
-    else:
-        print("\n⚠️  LLM analysis complete, but no skills were extracted.")
+def extract_skills_from_resume(path: Path) -> list[str]:
+    return extract_skills_from_text(read_document_text(path))
+
+
+def extract_skills_from_github(username: str) -> list[str]:
+    languages = github.fetch_repo_languages(github.fetch_repos(username))
+    readme = github.fetch_profile_readme(username) or "No README content provided."
+    user_prompt = f'Repo Languages: "{", ".join(languages)}"\nProfile README: "{readme}"'
+    llm_skills = _ask_llm_for_skills(GITHUB_SYSTEM_PROMPT, user_prompt)
+    return llm_skills if llm_skills is not None else languages
