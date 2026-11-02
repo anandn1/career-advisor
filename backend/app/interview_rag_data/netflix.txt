@@ -1,0 +1,187 @@
+#TOPIC: Data Structures & Algorithms
+
+#DIFFICULTY: Easy
+What is a hash map, and when do you use it for search and retrieval?
+---
+Reverse a string or array in place.
+---
+Determine if a given array contains duplicate values.
+---
+Find the first non-repeating character in a string.
+---
+
+#DIFFICULTY: Medium
+Find the longest substring with at most k unique characters.
+---
+Design and implement a queue using stacks.
+---
+Merge two sorted lists into a single sorted list.
+---
+Find all pairs in an array that sum to a target value.
+---
+
+#DIFFICULTY: Hard
+Implement an LFU (Least Frequently Used) cache and explain its use in streaming.
+---
+Find all triplets in an array that sum to zero.
+---
+Design a data structure to track the top K trending movies in real time.
+---
+Calculate the edit distance between two strings for recommendation similarity.
+
+#TOPIC: System Design
+
+#DIFFICULTY: Medium
+Design a microservices architecture to handle user authentication and playback state for millions of Netflix users.
+---
+Describe how you would design Netflix's Search System with fast autocomplete and typo tolerance.
+---
+Design Netflix's notification system for release alerts and recommendations.
+---
+
+#DIFFICULTY: Hard
+Design a fault-tolerant global video streaming system (99.99% uptime, multi-region, edge cache failover).
+---
+Design a content delivery network (CDN) like Netflix Open Connect, focusing on global scalability and low latency.
+---
+Architect Netflix's Recommendation System: scalable ingestion, real-time updates, personalization at scale.
+---
+Design a real-time analytics system for playback events and quality monitoring.
+---
+Implement Chaos Engineering tools (like Chaos Monkey) to test resiliency.
+
+#TOPIC: Cloud & Infrastructure
+
+#DIFFICULTY: Easy
+Explain how Netflix leverages AWS for cloud infrastructure and scalability.
+---
+What is containerization, and how is Docker used in Netflix’s environment?
+---
+
+#DIFFICULTY: Medium
+Design an auto-scaling solution for handling traffic spikes (Black Friday release, live events).
+---
+Compare Kubernetes and ECS for orchestrating microservices.
+---
+Describe a disaster recovery plan for Netflix with multi-region data replication.
+---
+
+#DIFFICULTY: Hard
+Architect a cost-effective multi-cloud failover strategy to avoid major outages.
+---
+Design a monitoring system for global video streaming with health checks and rollback strategies.
+
+#TOPIC: Machine Learning / AI
+
+#DIFFICULTY: Medium
+How does Netflix use ML models for personalized recommendations?
+---
+Design a ranking engine for the Netflix homepage.
+---
+
+#DIFFICULTY: Hard
+Architect a real-time anomaly detection system for content quality.
+---
+Deploy low-latency ML model inference for millions of users simultaneously.
+---
+How would you personalize trailers or previews using computer vision and ML?
+
+#TOPIC: Databases
+
+#DIFFICULTY: Easy
+What is a NoSQL database, and why does Netflix use Cassandra for its catalog?
+---
+Explain data partitioning and sharding in large-scale streaming.
+---
+
+#DIFFICULTY: Medium
+Design a time-series database for playback analytics.
+---
+Explain the trade-offs between consistency and availability in Netflix's systems.
+---
+
+#DIFFICULTY: Hard
+Design a globally consistent transaction system for Netflix’s billing.
+---
+Architect a schema for supporting multi-language subtitles at scale.
+
+#TOPIC: Networking & Security
+
+#DIFFICULTY: Easy
+What is a CDN and why does Netflix use its own Open Connect network?
+---
+What is TLS and why is it critical for secure streaming?
+---
+
+#DIFFICULTY: Medium
+Design an API rate limiter to protect against abusive requests.
+---
+Compare circuit breaker and bulkhead patterns in microservices resilience.
+---
+How does Netflix prevent content piracy and ensure secure user data?
+---
+
+#DIFFICULTY: Hard
+Design a multi-region edge security system for content protection.
+---
+Explain trade-offs in securing customer payment data at scale.
+
+#TOPIC: Coding (All Languages)
+
+#DIFFICULTY: Easy
+Find the longest word in a subtitle by deleting some characters from a given string.
+---
+Add binary: add two binary numbers given as strings.
+---
+
+#DIFFICULTY: Medium
+Merge intervals: given a series of viewing windows, merge overlapping ones for watch stats.
+---
+Minimum Area Rectangle: Compute area in video timeline heatmap.
+---
+
+#DIFFICULTY: Hard
+Implement the celebrity problem (identify most interacted star in trending feed).
+---
+Fair Distribution of Stream Credits: distribute viewing credits to users minimizing unfairness.
+
+#TOPIC: Behavioral & Leadership
+
+#Relevant for All Levels
+Why Netflix? What excites you about working here?
+---
+Describe a time you solved a customer-impacting outage or high-pressure incident.
+---
+How do you balance innovation with reliability in product launches?
+---
+Give an example of fostering collaboration and cross-team ownership at scale.
+
+#TOPIC: Frameworks, Tools, & Emerging Technologies
+
+#DIFFICULTY: Medium
+Explain how Netflix uses Spring Boot in their Java microservices.
+---
+Describe the use of Kafka for streaming event pipelines.
+---
+How does Netflix utilize Chaos Monkey for resilience?
+
+#TOPIC: Frameworks, Tools, & Emerging Technologies
+
+#DIFFICULTY: Medium
+Explain how Netflix uses Spring Boot for building scalable Java microservices.
+---
+Describe practical scenarios for leveraging Kafka as a distributed messaging platform in Netflix's event pipeline.
+---
+How does Netflix utilize Chaos Monkey and the Simian Army for automated resilience testing?
+---
+Discuss the role of Spinnaker in Netflix's continuous delivery and deployment workflow.
+---
+
+#DIFFICULTY: Hard
+Design a content personalization API using GraphQL for dynamic data fetching in the Netflix homepage.
+---
+Architect a distributed tracing solution using OpenTelemetry or Zipkin for monitoring Netflix microservices.
+---
+How would you refactor a legacy service into a containerized deployment using Docker and Kubernetes, ensuring service discovery and network policies align with Netflix's scale?
+---
+Explore approaches for integrating generative AI models (e.g., LLMs) into Netflix's user interface for interactive recommendations or search.
