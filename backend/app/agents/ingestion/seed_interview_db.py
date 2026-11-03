@@ -16,7 +16,7 @@ DATA_SOURCE_DIR = Path(__file__).resolve().parent / "interview_rag_data"
 # A line holding only '---' separates questions (trailing spaces allowed).
 QUESTION_DELIMITER = re.compile(r"^[ \t]*---[ \t]*$", re.MULTILINE)
 # C-family directives inside a question are code, not comments.
-CODE_DIRECTIVE = re.compile(r"#\s*(include|define|undef|ifn?def|if|elif|else|endif|pragma)\b")
+CODE_DIRECTIVE = re.compile(r"#(include|define|undef|ifn?def|if|elif|else|endif|pragma)\b")
 # '#DIFFICULTY: Medium    # note' -> 'Medium'; a '#' with no space before it (C#) is kept.
 INLINE_COMMENT = re.compile(r"\s+#.*$")
 
@@ -39,9 +39,12 @@ class InterviewQuestionParser:
 
     # Regex patterns
     METADATA_PATTERN = re.compile(
-        r"^#\s*(?P<key>COMPANY|TOPIC|DIFFICULTY):\s*(?P<value>.+)$", re.IGNORECASE | re.MULTILINE
+        r"^[ \t]*#\s*(?P<key>COMPANY|TOPIC|DIFFICULTY):\s*(?P<value>.+)$",
+        re.IGNORECASE | re.MULTILINE,
     )
-    SECTION_SPLIT_PATTERN = re.compile(r"\n(?=#\s*(?:COMPANY|TOPIC|DIFFICULTY):)", re.IGNORECASE)
+    SECTION_SPLIT_PATTERN = re.compile(
+        r"\n(?=[ \t]*#\s*(?:COMPANY|TOPIC|DIFFICULTY):)", re.IGNORECASE
+    )
 
     def __init__(self, file_path: Path):
         self.file_path = file_path
@@ -99,7 +102,7 @@ class InterviewQuestionParser:
             print(f"❌ Error reading {self.file_path}: {e}")
             return
 
-        content = self._preprocess_content(raw_content.replace("\r\n", "\n"))
+        content = self._preprocess_content(raw_content)  # read_text already normalizes newlines
 
         # Split into sections
         sections = self.SECTION_SPLIT_PATTERN.split(content)

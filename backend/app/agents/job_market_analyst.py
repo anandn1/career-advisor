@@ -82,6 +82,11 @@ def _posting_to_document(posting: dict[str, Any]) -> Document:
 
 
 def _locations_match(wanted: str, found: str) -> bool:
+    """Any wanted location (comma-separated) matches the posting's location."""
+    return any(_location_matches(place, found) for place in wanted.split(","))
+
+
+def _location_matches(wanted: str, found: str) -> bool:
     """Whole-word match either way: 'Pune' matches 'Pune, Maharashtra, India'."""
     wanted_words = set(_WORD.findall(wanted.lower()))
     found_words = set(_WORD.findall(found.lower()))
@@ -100,9 +105,12 @@ def _skills_from_content(content: str) -> list[str]:
 
 def _cached_skills(document: Document) -> list[str]:
     """Skills from metadata (JSON, keeps commas inside skills), else from older content."""
-    stored = document.metadata.get("skills")
-    if stored:
-        return [skill.lower() for skill in json.loads(stored)]
+    try:
+        stored = json.loads(document.metadata.get("skills") or "null")
+    except (TypeError, ValueError):
+        stored = None
+    if isinstance(stored, list) and all(isinstance(skill, str) for skill in stored):
+        return [skill.lower() for skill in stored]
     return _skills_from_content(document.page_content.lower())
 
 

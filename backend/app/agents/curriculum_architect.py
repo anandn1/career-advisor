@@ -319,8 +319,9 @@ def iteration_controller_node(state: CurriculumGraphState) -> dict:
 
 
 def _mentions_word(text: str, keyword: str) -> bool:
-    """Whole-word match, so 'go' matches 'Go basics' but not 'Google'."""
-    return re.search(rf"(?<![a-z0-9]){re.escape(keyword)}(?![a-z0-9])", text) is not None
+    """Whole-word match: 'go' matches 'Go basics' but not 'Google'; 'c' does not match 'C++'."""
+    pattern = rf"(?<![a-z0-9+#]){re.escape(keyword)}(?![a-z0-9+#])"
+    return re.search(pattern, text) is not None
 
 
 def _skill_keywords(skill: str) -> list[str]:
@@ -669,8 +670,10 @@ def build_learning_path(skill_gap_analysis: str, resume_inventory: str) -> Curri
 
 
 SOFT_SKILLS = {
-    "communication", "teamwork", "collaboration", "problem solving", "scrum", "agile",
-    "user experience", "user interface", "leadership", "presentation", "time management",
+    "communication", "teamwork", "collaboration", "problem solving", "problem-solving",
+    "scrum", "agile", "agile methodologies", "kanban", "critical thinking",
+    "project management", "user experience", "user interface", "leadership",
+    "presentation", "time management",
 }  # fmt: skip
 
 

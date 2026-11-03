@@ -53,6 +53,8 @@ TOPIC_FOR_KEYWORD = {
     "react": "Frontend Frameworks",
     "vue": "Frontend Frameworks",
     "aws": "Cloud & DevOps",
+    "gcp": "Cloud & DevOps",
+    "google cloud": "Cloud & DevOps",
     "azure": "Cloud & DevOps",
     "docker": "Cloud & DevOps",
     "kubernetes": "Cloud & DevOps",
@@ -136,11 +138,22 @@ Example: if the answer was about sharding, ask "How would you handle a hot shard
 Your follow-up question:""")
 
 
+_KEYWORDS_LONGEST_FIRST = sorted(TOPIC_FOR_KEYWORD, key=len, reverse=True)
+
+
+def _has_word(text: str, keyword: str) -> bool:
+    """Whole-word match, so 'go' is not found in 'mongodb' or 'algorithms'."""
+    pattern = rf"(?<![a-z0-9+#]){re.escape(keyword)}(?![a-z0-9+#])"
+    return re.search(pattern, text.lower()) is not None
+
+
 def topics_for_skill_gaps(skill_gaps: list[str]) -> list[str]:
     """Map skill gaps to interview topics; System Design is always included."""
     topics = set()
     for gap in skill_gaps[:SKILL_GAPS_TO_MAP]:
-        topic = next((t for kw, t in TOPIC_FOR_KEYWORD.items() if kw in gap.lower()), None)
+        topic = next(
+            (TOPIC_FOR_KEYWORD[kw] for kw in _KEYWORDS_LONGEST_FIRST if _has_word(gap, kw)), None
+        )
         if topic:
             topics.add(topic)
     if not topics:
@@ -320,7 +333,8 @@ def _last_question_and_answer(messages: list[BaseMessage]) -> tuple[str, str] | 
         elif answer is not None and isinstance(message, AIMessage) and message.name == INTERVIEWER:
             question = message.content
             break
-    return (question, answer) if question and answer else None
+    # An empty answer is still an answer: it gets graded rather than ignored.
+    return (question, answer) if question is not None and answer is not None else None
 
 
 def _parse_field(name: str, text: str, default: str, flags: int = 0) -> str:
@@ -421,6 +435,8 @@ def decide_action_router(
     if _user_asked_to_stop(state["messages"]) or not state.get("evaluation_report"):
         return "update_coverage"
     last = state["evaluation_report"][-1]
+    if last["question_id"] != state.get("current_question_id"):
+        return "update_coverage"
     out_of_follow_ups = state.get("follow_up_count", 0) >= MAX_FOLLOW_UPS_PER_QUESTION
     if last["evaluation"] in GOOD_GRADES | {EVALUATION_ERROR} or out_of_follow_ups:
         return "update_coverage"
@@ -559,6 +575,8 @@ def start_interview(
     focus: InterviewFocus = "gaps",
 ) -> InterviewTurn:
     """Begin a session on a new `thread_id`; returns the first question."""
+    if not topics:
+        raise ValueError("topic_list is required")
     if get_interview_graph().get_state(_thread(thread_id)).values:
         raise InterviewStateError(f"Interview {thread_id!r} already exists")
     initial = {

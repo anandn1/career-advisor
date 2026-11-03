@@ -34,8 +34,8 @@ LATEX_SPECIAL_CHARACTERS = {
     "^": r"\textasciicircum{}",
 }
 _FENCED_BLOCK = re.compile(r"```[^\n]*\n(.*?)(?:\n```|$)", re.DOTALL)
-# '%' starts a comment unless escaped as '\%'.
-_LATEX_COMMENT = re.compile(r"(?<!\\)%.*$", re.MULTILINE)
+# '%' starts a comment unless escaped as '\%' ('\\%' is a line break, then a comment).
+_LATEX_COMMENT = re.compile(r"(?<!\\)((?:\\\\)*)%.*$", re.MULTILINE)
 REQUIRED_LATEX_MARKERS = (r"\documentclass", r"\begin{document}", r"\end{document}")
 
 
@@ -167,7 +167,7 @@ def strip_code_fences(text: str) -> str:
 
 
 def _without_comments(latex: str) -> str:
-    return _LATEX_COMMENT.sub("", latex)
+    return _LATEX_COMMENT.sub(r"\1", latex)
 
 
 def validate_latex(latex: str) -> str:

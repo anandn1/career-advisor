@@ -81,18 +81,18 @@ def fetch_repos(username: str, limit: int = MAX_REPOS) -> list[dict]:
     """Most recently updated public repos, trimmed to the fields we use."""
     raw = _get_json(
         f"{API_ROOT}/users/{validate_username(username)}/repos",
-        params={"sort": "updated", "per_page": limit},
+        params={"sort": "updated", "per_page": max(1, min(limit, MAX_REPOS))},
     )
     if not isinstance(raw, list):
         return []
     return [
         {
-            "name": repo.get("name", ""),
+            "name": repo.get("name") or "",
             "description": repo.get("description") or "",
             "language": repo.get("language") or "",
-            "stars": repo.get("stargazers_count", 0),
-            "html_url": repo.get("html_url", ""),
-            "languages_url": repo.get("languages_url", ""),
+            "stars": repo.get("stargazers_count") or 0,
+            "html_url": repo.get("html_url") or "",
+            "languages_url": repo.get("languages_url") or "",
         }
         for repo in raw
         if isinstance(repo, dict)

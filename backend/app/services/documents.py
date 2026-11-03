@@ -64,7 +64,10 @@ def read_document_text(path: Path) -> str:
     if suffix == ".docx":
         return _docx_text(path)
     if suffix == ".txt":
-        return path.read_text(encoding="utf-8", errors="replace")
+        try:
+            return path.read_text(encoding="utf-8", errors="replace")
+        except OSError as error:
+            raise UnreadableDocumentError(f"Could not read {path.name}: {error}") from error
     raise UnsupportedDocumentError(
         f"Unsupported file type {suffix!r}; use one of {', '.join(SUPPORTED_SUFFIXES)}"
     )

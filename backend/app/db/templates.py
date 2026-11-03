@@ -47,10 +47,8 @@ def find_template_for_role(session: Session, target_role: str) -> ResumeTemplate
     def overlap(template: ResumeTemplate) -> int:
         return len(role_stems & set().union(*(_stems(tag.name) for tag in template.tags)))
 
-    best = max(templates, key=overlap, default=None)  # max keeps the first of equals
-    if best is not None and overlap(best) == 0:
-        return templates[0]
-    return best
+    # max keeps the first of equal scores, so no match at all gives templates[0].
+    return max(templates, key=overlap, default=None)
 
 
 def get_or_create_tag(session: Session, name: str) -> Tag:
