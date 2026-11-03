@@ -1,9 +1,12 @@
 """The agent-run handlers, with the agents themselves faked."""
 
+import json
+
 import pytest
 
 from app.agents.resume_reviewer import ResumeReview
 from app.agents.resume_strategist import ContactInfo, ResumeDraft, ResumeResult
+from app.core.config import REPO_ROOT
 from app.db import career_sessions
 from app.db.models import CareerSession, ResumeFile, ResumeTemplate, RunKind
 from app.db.session import session_scope
@@ -45,7 +48,7 @@ def test_resume_skills_are_saved_on_the_session(context, monkeypatch):
     monkeypatch.setattr(run_handlers.skills, "extract_skills_from_text", lambda text: ["Python"])
     ctx = context(RunKind.SKILLS_FROM_RESUME, {"resume_text": "I write Python"})
     assert run_handlers.skills_from_resume(ctx) == {"skills": ["Python"]}
-    assert stored_session(ctx.session_id).skills == ["Python"]
+    assert stored_session(ctx.session_id).skills == ["Go", "Python"]
 
 
 def test_github_skills_also_save_the_username(context, monkeypatch):
@@ -53,7 +56,7 @@ def test_github_skills_also_save_the_username(context, monkeypatch):
     ctx = context(RunKind.SKILLS_FROM_GITHUB, {"github_username": "octocat"})
     run_handlers.skills_from_github(ctx)
     saved = stored_session(ctx.session_id)
-    assert (saved.skills, saved.github_username) == (["Rust"], "octocat")
+    assert (saved.skills, saved.github_username) == (["Go", "Rust"], "octocat")
 
 
 def test_job_market_reports_each_graph_step(context, monkeypatch):
@@ -110,9 +113,11 @@ def draft():
     return ResumeDraft(contact=ContactInfo(name="Ada"), summary="Engineer")
 
 
+RESUME_PROFILE = {"target_role": "Backend Dev", "skills": ["Go"]}
+
+
 def resume_context(context, template_id=None):
-    profile = {"target_role": "Backend Dev", "skills": ["Go"]}
-    return context(RunKind.RESUME, {"profile": profile, "template_id": template_id})
+    return context(RunKind.RESUME, {"profile": RESUME_PROFILE, "template_id": template_id})
 
 
 @pytest.fixture
@@ -140,7 +145,8 @@ def test_resume_without_tex_stores_only_latex(context, fake_generation, monkeypa
     result = run_handlers.resume(ctx)
     saved = stored_file(ctx.run_id)
     assert (saved.latex, saved.pdf, result["has_pdf"]) == (VALID, None, False)
-    assert result["pdf_error"]
+    assert result["pdf_error"] == "PDF compilation is not available on this server."
+    assert events(ctx) == ["drafting_resume"]  # no "compiling_pdf" step without TeX
 
 
 def test_resume_with_tex_stores_the_pdf(context, fake_generation, monkeypatch):
@@ -182,11 +188,6 @@ def test_resume_without_a_template_uses_the_default(context, fake_generation, mo
     monkeypatch.setattr(latex, "is_available", lambda: False)
     run_handlers.resume(resume_context(context))
     assert fake_generation["template"] == run_handlers.default_template()
-
-
-def test_deleted_template_is_a_user_facing_error(context, fake_generation):
-    with pytest.raises(UserFacingError):
-        run_handlers.resume(resume_context(context, "deleted-template"))
 
 
 def test_rerender_typesets_the_edited_draft(context, monkeypatch):
@@ -295,13 +296,6 @@ def test_progress_after_the_run_is_deleted_stops_the_handler(context):
         ctx.progress("anything")
 
 
-def test_github_skills_report_progress(context, monkeypatch):
-    monkeypatch.setattr(run_handlers.skills, "extract_skills_from_github", lambda name: [])
-    ctx = context(RunKind.SKILLS_FROM_GITHUB, {"github_username": "octocat"})
-    run_handlers.skills_from_github(ctx)
-    assert events(ctx) == ["reading_github"]
-
-
 def test_resume_reports_pdf_compilation(context, fake_generation, monkeypatch):
     monkeypatch.setattr(latex, "is_available", lambda: True)
     monkeypatch.setattr(latex, "compile_pdf", lambda source: b"%PDF")
@@ -395,3 +389,166 @@ def test_run_graph_works_without_a_step_callback():
     graph.add_edge(START, "double")
     graph.add_edge("double", END)
     assert run_graph(graph.compile(), {"n": 4}) == {"n": 8}
+
+
+def test_imported_skills_merge_with_existing_ones_ignoring_case(context, monkeypatch):
+    monkeypatch.setattr(
+        run_handlers.skills, "extract_skills_from_text", lambda text: ["go", "Rust"]
+    )
+    ctx = context(RunKind.SKILLS_FROM_RESUME, {"resume_text": "cv"}, skills=("Go", "SQL"))
+    run_handlers.skills_from_resume(ctx)
+    assert stored_session(ctx.session_id).skills == ["Go", "SQL", "Rust"]
+
+
+# --- Round-1 frontend audit: backend handler gaps ---
+
+
+def set_session_skills(session_id, skills):
+    with session_scope() as db:
+        db.get(CareerSession, session_id).skills = list(skills)
+
+
+def test_import_keeps_skills_added_while_it_ran(context, monkeypatch):
+    ctx = context(RunKind.SKILLS_FROM_RESUME, {"resume_text": "cv"}, skills=("Go",))
+    set_session_skills(ctx.session_id, ["Go", "SQL"])  # the user edits the list mid-run
+    monkeypatch.setattr(run_handlers.skills, "extract_skills_from_text", lambda text: ["Rust"])
+    run_handlers.skills_from_resume(ctx)
+    assert stored_session(ctx.session_id).skills == ["Go", "SQL", "Rust"]
+
+
+def test_import_keeps_skills_removed_while_it_ran(context, monkeypatch):
+    ctx = context(RunKind.SKILLS_FROM_GITHUB, {"github_username": "octocat"}, skills=("Go", "SQL"))
+    set_session_skills(ctx.session_id, ["Go"])  # SQL removed mid-run
+    monkeypatch.setattr(run_handlers.skills, "extract_skills_from_github", lambda name: ["Rust"])
+    run_handlers.skills_from_github(ctx)
+    assert stored_session(ctx.session_id).skills == ["Go", "Rust"]
+
+
+def test_github_import_returns_skills_and_reports_the_username(context, monkeypatch):
+    monkeypatch.setattr(run_handlers.skills, "extract_skills_from_github", lambda name: ["Rust"])
+    ctx = context(RunKind.SKILLS_FROM_GITHUB, {"github_username": "octocat"})
+    assert run_handlers.skills_from_github(ctx) == {"skills": ["Rust"]}
+    with session_scope() as db:
+        event = career_sessions.get_run(db, ctx.run_id).events[0]
+    assert (event["step"], event["detail"]) == ("reading_github", {"username": "octocat"})
+
+
+def test_saving_skills_for_a_deleted_session_is_a_run_gone_error(context):
+    from app.services.runner import RunGoneError
+
+    ctx = context()
+    with session_scope() as db:
+        db.delete(db.get(CareerSession, ctx.session_id))
+    with pytest.raises(RunGoneError):
+        ctx.add_session_skills(["Go"])
+    with pytest.raises(RunGoneError):
+        ctx.update_session(github_username="octocat")
+
+
+def test_deleted_template_stores_nothing_and_skips_generation(context, monkeypatch):
+    calls = []
+    monkeypatch.setattr(run_handlers, "generate_resume", lambda *a: calls.append(a))
+    ctx = resume_context(context, "deleted-template")
+    with pytest.raises(UserFacingError, match="no longer exists"):
+        run_handlers.resume(ctx)
+    with session_scope() as db:
+        assert db.get(ResumeFile, ctx.run_id) is None
+    assert calls == []
+
+
+def test_rerender_uses_the_selected_template_and_reports_its_steps(context, monkeypatch):
+    seen = {}
+
+    def render(edited, template):
+        seen["template"] = template
+        return VALID
+
+    monkeypatch.setattr(run_handlers, "render_latex", render)
+    monkeypatch.setattr(latex, "is_available", lambda: True)
+    monkeypatch.setattr(latex, "compile_pdf", lambda source: b"%PDF")
+    with session_scope() as db:
+        template = ResumeTemplate(name="clean", latex_src="CLEAN TEMPLATE")
+        db.add(template)
+        db.flush()
+        template_id = template.id
+    ctx = context(
+        RunKind.RESUME_RENDER, {"draft": draft().model_dump(), "template_id": template_id}
+    )
+    result = run_handlers.resume_render(ctx)
+    assert (seen["template"], result["template_id"], result["has_pdf"]) == (
+        "CLEAN TEMPLATE",
+        template_id,
+        True,
+    )
+    assert events(ctx) == ["typesetting_resume", "compiling_pdf"]
+
+
+def test_review_without_a_request_uses_an_empty_request(context, monkeypatch):
+    seen = {}
+
+    def review(text, role, request):
+        seen["request"] = request
+        return ResumeReview(summary="s", strengths=[], weaknesses=[], suggestions=[])
+
+    monkeypatch.setattr(run_handlers, "review_resume", review)
+    run_handlers.resume_review(context(RunKind.RESUME_REVIEW, {"resume_text": "CV"}))
+    assert seen == {"request": ""}
+
+
+def test_job_market_tolerates_a_state_without_results(context, monkeypatch):
+    monkeypatch.setattr(
+        run_handlers.job_market_analyst,
+        "run_job_market_analysis",
+        lambda role, location, skills, on_step: {},
+    )
+    assert run_handlers.job_market(context()) == {"jobs": [], "analysis": {}}
+
+
+# --- Each run kind reports exactly the steps the frontend draws for it ---
+
+STEPS_FILE = REPO_ROOT / "frontend" / "src" / "lib" / "agent-steps.json"
+
+
+def frontend_steps(kind):
+    stops = json.loads(STEPS_FILE.read_text())[kind.value]
+    return {step for steps in stops.values() for step in steps}
+
+
+def run_each_handler(kind, context, monkeypatch):
+    """Run the handler for `kind` with every external call faked; returns its context."""
+    monkeypatch.setattr(run_handlers.skills, "extract_skills_from_text", lambda text: ["Go"])
+    monkeypatch.setattr(run_handlers.skills, "extract_skills_from_github", lambda name: ["Go"])
+    monkeypatch.setattr(
+        run_handlers, "generate_resume", lambda p, t: ResumeResult(draft=draft(), latex=VALID)
+    )
+    monkeypatch.setattr(run_handlers, "render_latex", lambda d, t: VALID)
+    review = ResumeReview(summary="s", strengths=[], weaknesses=[], suggestions=[])
+    monkeypatch.setattr(run_handlers, "review_resume", lambda text, role, request: review)
+    monkeypatch.setattr(latex, "is_available", lambda: True)
+    monkeypatch.setattr(latex, "compile_pdf", lambda source: b"%PDF")
+    inputs = {
+        RunKind.SKILLS_FROM_RESUME: {"resume_text": "cv"},
+        RunKind.SKILLS_FROM_GITHUB: {"github_username": "octocat"},
+        RunKind.RESUME: {"profile": RESUME_PROFILE},
+        RunKind.RESUME_RENDER: {"draft": draft().model_dump()},
+        RunKind.RESUME_REVIEW: {"resume_text": "cv"},
+    }
+    ctx = context(kind, inputs[kind])
+    run_handlers.HANDLERS[kind](ctx)
+    return ctx
+
+
+@pytest.mark.skipif(not STEPS_FILE.exists(), reason="frontend not checked out")
+@pytest.mark.parametrize(
+    "kind",
+    [
+        RunKind.SKILLS_FROM_RESUME,
+        RunKind.SKILLS_FROM_GITHUB,
+        RunKind.RESUME,
+        RunKind.RESUME_RENDER,
+        RunKind.RESUME_REVIEW,
+    ],
+)
+def test_each_handler_reports_exactly_the_steps_the_frontend_draws(kind, context, monkeypatch):
+    ctx = run_each_handler(kind, context, monkeypatch)
+    assert set(events(ctx)) == frontend_steps(kind)
