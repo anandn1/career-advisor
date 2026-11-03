@@ -13,6 +13,8 @@ import { forgetSession, type Report, useReport } from "@/hooks/use-career";
 import { api, unwrap } from "@/lib/api/client";
 import { STATIONS, type StationId } from "@/lib/stations";
 
+const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
+
 /** One line per station: what the route has produced there so far (null if nothing yet). */
 export function stationSummaries(report: Report): Record<StationId, string | null> {
   const skills = report.session.skills;
@@ -20,14 +22,14 @@ export function stationSummaries(report: Report): Record<StationId, string | nul
   const path = report.learning_path?.path;
   const finishedInterviews = report.interviews.filter((i) => i.status === "succeeded").length;
   return {
-    skills: skills.length ? `${skills.length} skills: ${skills.slice(0, 8).join(", ")}${skills.length > 8 ? "…" : ""}` : null,
+    skills: skills.length ? `${plural(skills.length, "skill")}: ${skills.slice(0, 8).join(", ")}${skills.length > 8 ? "…" : ""}` : null,
     market: market
-      ? `${market.jobs.length} postings read; top gaps: ${rankGaps(market).slice(0, 5).map((g) => g.skill).join(", ") || "none"}`
+      ? `${plural(market.jobs.length, "posting")} read; top gaps: ${rankGaps(market).slice(0, 5).map((g) => g.skill).join(", ") || "none"}`
       : null,
-    path: path ? `${path.recommendations.length} courses across ${path.skill_gaps.length} skills` : null,
+    path: path ? `${plural(path.recommendations.length, "course")} across ${plural(path.skill_gaps.length, "skill")}` : null,
     resume: report.resume ? (report.resume.has_pdf ? "Resume written, PDF ready" : "Resume written (.tex)") :
       report.resume_review ? "Existing resume reviewed" : null,
-    interview: finishedInterviews ? `${finishedInterviews} mock interview${finishedInterviews > 1 ? "s" : ""} finished` : null,
+    interview: finishedInterviews ? `${plural(finishedInterviews, "mock interview")} finished` : null,
   };
 }
 

@@ -64,15 +64,23 @@ export function StartForm() {
   // localStorage only exists in the browser; the server snapshot is "no previous route".
   const previous = useSyncExternalStore(noSubscription, rememberedSession, () => null);
 
+  // Once created, a retry reuses this session instead of creating (and orphaning) another.
+  const [createdId, setCreatedId] = useState<string | null>(null);
+
   async function submit(event: React.FormEvent) {
     event.preventDefault();
+    if (background === "resume" && !file) {
+      setError("Choose a resume file, or pick “Add skills later”.");
+      return;
+    }
     setError(null);
     setSubmitting(true);
     try {
-      const session = await createSession(role, location);
-      rememberSession(session.id);
-      await importBackground(session.id, background, file, github);
-      router.push(`/s/${session.id}/skills`);
+      const sessionId = createdId ?? (await createSession(role, location)).id;
+      setCreatedId(sessionId);
+      rememberSession(sessionId);
+      await importBackground(sessionId, background, file, github);
+      router.push(`/s/${sessionId}/skills`);
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : "Could not reach the server. Is the API running?");
       setSubmitting(false);

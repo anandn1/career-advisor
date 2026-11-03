@@ -45,7 +45,9 @@ export function SkillChips({ sessionId, skills }: { sessionId: string; skills: s
         className="flex max-w-md items-end gap-2"
         onSubmit={(event) => {
           event.preventDefault();
-          if (draft.trim()) save([...skills, draft.trim()]);
+          const skill = draft.trim();
+          const known = skills.some((existing) => existing.toLowerCase() === skill.toLowerCase());
+          if (skill && !known) save([...skills, skill]);
           setDraft("");
         }}
       >

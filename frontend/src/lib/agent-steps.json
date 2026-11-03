@@ -1,0 +1,19 @@
+{
+  "skills_from_resume": { "read": ["extracting_skills"] },
+  "skills_from_github": { "read": ["reading_github"] },
+  "job_market": {
+    "cache": ["search_cached_postings"],
+    "scrape": ["scrape_fresh_postings"],
+    "gaps": ["analyze_skill_gaps"]
+  },
+  "learning_path": {
+    "plan": ["entry", "planner"],
+    "search": ["iteration_controller", "fetch_course_catalog", "web_search_for_courses", "process_and_store_courses"],
+    "score": ["start_evaluation", "check_prerequisites", "match_interests", "estimate_workload", "aggregate_scores", "recommend_enrollment", "suggest_alternatives"],
+    "assemble": ["architect", "handle_submission"],
+    "review": ["critic", "prepare_revision"]
+  },
+  "resume": { "draft": ["drafting_resume"], "pdf": ["compiling_pdf"] },
+  "resume_render": { "typeset": ["typesetting_resume"], "pdf": ["compiling_pdf"] },
+  "resume_review": { "review": ["reviewing_resume"] }
+}

@@ -9,7 +9,6 @@ from app.agents.resume_strategist import (
     generate_resume,
     render_latex,
 )
-from app.db.career_sessions import unique_ignoring_case
 from app.db.models import ResumeFile, RunKind
 from app.db.session import session_scope
 from app.db.templates import get_template
@@ -21,15 +20,10 @@ def _step_reporter(context: RunContext):
     return lambda node: context.progress(node)
 
 
-def _merged_with_session_skills(context: RunContext, found: list[str]) -> list[str]:
-    """Existing skills first, then newly found ones; duplicates ignore case."""
-    return unique_ignoring_case([*context.session.skills, *found])
-
-
 def skills_from_resume(context: RunContext) -> dict:
     context.progress("extracting_skills")
     found = skills.extract_skills_from_text(context.input["resume_text"])
-    context.update_session(skills=_merged_with_session_skills(context, found))
+    context.add_session_skills(found)
     return {"skills": found}
 
 
@@ -37,9 +31,8 @@ def skills_from_github(context: RunContext) -> dict:
     username = context.input["github_username"]
     context.progress("reading_github", {"username": username})
     found = skills.extract_skills_from_github(username)
-    context.update_session(
-        skills=_merged_with_session_skills(context, found), github_username=username
-    )
+    context.add_session_skills(found)
+    context.update_session(github_username=username)
     return {"skills": found}
 
 

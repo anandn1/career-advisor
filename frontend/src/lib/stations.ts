@@ -1,4 +1,5 @@
 import type { Run, RunKind } from "@/lib/api/client";
+import agentSteps from "@/lib/agent-steps.json";
 
 /** A station on the route from the user's skills to the target role. */
 export type StationId = "skills" | "market" | "path" | "resume" | "interview";
@@ -36,35 +37,31 @@ export function station(id: StationId): Station {
 /** A stop on a run line: one readable step, made of one or more agent graph nodes. */
 export type Stop = { id: string; label: string; nodes: string[] };
 
-export const STOPS: Record<Exclude<RunKind, "interview">, Stop[]> = {
-  skills_from_resume: [{ id: "read", label: "Reading your resume", nodes: ["extracting_skills"] }],
-  skills_from_github: [{ id: "read", label: "Reading your GitHub", nodes: ["reading_github"] }],
-  job_market: [
-    { id: "cache", label: "Saved postings", nodes: ["search_cached_postings"] },
-    { id: "scrape", label: "Live LinkedIn postings", nodes: ["scrape_fresh_postings"] },
-    { id: "gaps", label: "Skill gaps", nodes: ["analyze_skill_gaps"] },
-  ],
-  learning_path: [
-    { id: "plan", label: "Planning", nodes: ["entry", "planner"] },
-    { id: "search", label: "Finding courses",
-      nodes: ["iteration_controller", "fetch_course_catalog", "web_search_for_courses",
-              "process_and_store_courses"] },
-    { id: "score", label: "Scoring courses",
-      nodes: ["start_evaluation", "check_prerequisites", "match_interests", "estimate_workload",
-              "aggregate_scores", "recommend_enrollment", "suggest_alternatives"] },
-    { id: "assemble", label: "Assembling the path", nodes: ["architect", "handle_submission"] },
-    { id: "review", label: "Reviewing", nodes: ["critic", "prepare_revision"] },
-  ],
-  resume: [
-    { id: "draft", label: "Writing your resume", nodes: ["drafting_resume"] },
-    { id: "pdf", label: "Typesetting the PDF", nodes: ["compiling_pdf"] },
-  ],
-  resume_render: [
-    { id: "typeset", label: "Typesetting your edits", nodes: ["typesetting_resume"] },
-    { id: "pdf", label: "Typesetting the PDF", nodes: ["compiling_pdf"] },
-  ],
-  resume_review: [{ id: "review", label: "Reviewing your resume", nodes: ["reviewing_resume"] }],
+type BackgroundKind = Exclude<RunKind, "interview">;
+
+/**
+ * Agent step names per stop. They live in agent-steps.json because the backend test suite
+ * checks them against the real LangGraph nodes and handler progress steps.
+ */
+const STEP_NAMES = agentSteps as Record<BackgroundKind, Record<string, string[]>>;
+
+const STOP_LABELS: Record<BackgroundKind, Record<string, string>> = {
+  skills_from_resume: { read: "Reading your resume" },
+  skills_from_github: { read: "Reading your GitHub" },
+  job_market: { cache: "Saved postings", scrape: "Live LinkedIn postings", gaps: "Skill gaps" },
+  learning_path: { plan: "Planning", search: "Finding courses", score: "Scoring courses",
+                   assemble: "Assembling the path", review: "Reviewing" },
+  resume: { draft: "Writing your resume", pdf: "Typesetting the PDF" },
+  resume_render: { typeset: "Typesetting your edits", pdf: "Typesetting the PDF" },
+  resume_review: { review: "Reviewing your resume" },
 };
+
+export const STOPS = Object.fromEntries(
+  (Object.keys(STOP_LABELS) as BackgroundKind[]).map((kind) => [
+    kind,
+    Object.entries(STOP_LABELS[kind]).map(([id, label]) => ({ id, label, nodes: STEP_NAMES[kind][id] })),
+  ]),
+) as Record<BackgroundKind, Stop[]>;
 
 export type StopState = "waiting" | "current" | "passed";
 
@@ -76,20 +73,20 @@ export function stopProgress(run: Pick<Run, "kind" | "status" | "events">): Stop
   if (run.kind === "interview") return [];
   const stops = STOPS[run.kind];
   const visits = new Map<string, number>();
-  let lastStop = -1;
-  let previous = -1;
+  let furthest = -1; // the furthest stop reached so far
+  let latest = -1; // the stop of the most recent step (the learning path loops back)
   for (const event of run.events) {
     const index = stops.findIndex((stop) => stop.nodes.includes(String(event.step)));
     if (index === -1) continue;
-    if (index !== previous) visits.set(stops[index].id, (visits.get(stops[index].id) ?? 0) + 1);
-    previous = index;
-    lastStop = Math.max(lastStop, index);
+    if (index !== latest) visits.set(stops[index].id, (visits.get(stops[index].id) ?? 0) + 1);
+    latest = index;
+    furthest = Math.max(furthest, index);
   }
-  const finished = run.status === "succeeded" || run.status === "failed";
+  const travelling = run.status === "queued" || run.status === "running";
   return stops.map((stop, index) => {
     let state: StopState = "waiting";
-    if (index < lastStop || (finished && visits.has(stop.id))) state = "passed";
-    else if (index === lastStop) state = finished ? "passed" : "current";
+    if (travelling && index === latest) state = "current";
+    else if (index <= furthest && (index < furthest || !travelling || index !== latest)) state = "passed";
     return { stop, state, visits: visits.get(stop.id) ?? 0 };
   });
 }
