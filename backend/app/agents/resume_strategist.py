@@ -6,6 +6,7 @@ then a full LaTeX document that follows a reference template's style.
 
 import json
 import logging
+import re
 from pathlib import Path
 
 from langchain_core.output_parsers import StrOutputParser
@@ -32,6 +33,9 @@ LATEX_SPECIAL_CHARACTERS = {
     "~": r"\textasciitilde{}",
     "^": r"\textasciicircum{}",
 }
+_FENCED_BLOCK = re.compile(r"```[^\n]*\n(.*?)(?:\n```|$)", re.DOTALL)
+# '%' starts a comment unless escaped as '\%'.
+_LATEX_COMMENT = re.compile(r"(?<!\\)%.*$", re.MULTILINE)
 REQUIRED_LATEX_MARKERS = (r"\documentclass", r"\begin{document}", r"\end{document}")
 
 
@@ -146,16 +150,22 @@ def escape_latex(value):
 
 
 def strip_code_fences(text: str) -> str:
-    lines = text.strip().splitlines()
-    if lines and lines[0].startswith("```"):
-        lines = lines[1:]
-    if lines and lines[-1].strip() == "```":
-        lines = lines[:-1]
-    return "\n".join(lines).strip()
+    """The LaTeX inside the first ``` fence, else the text from \\documentclass on."""
+    fenced = _FENCED_BLOCK.search(text)
+    if fenced:
+        return fenced.group(1).strip()
+    start = text.find(r"\documentclass")
+    return (text[start:] if start >= 0 else text).strip()
+
+
+def _without_comments(latex: str) -> str:
+    return _LATEX_COMMENT.sub("", latex)
 
 
 def validate_latex(latex: str) -> str:
-    missing = [marker for marker in REQUIRED_LATEX_MARKERS if marker not in latex]
+    """Require the document markers outside comments; returns the LaTeX unchanged."""
+    live = _without_comments(latex)
+    missing = [marker for marker in REQUIRED_LATEX_MARKERS if marker not in live]
     if missing:
         raise InvalidLatexError(f"Generated LaTeX is missing {', '.join(missing)}")
     return latex

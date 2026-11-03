@@ -90,6 +90,26 @@ KNOWN_SKILLS = [
     "3D Rendering", "Animation",
 ]  # fmt: skip
 
+# Skills that are also everyday words ("ready to go", "a slack schedule") only
+# count when written with their usual capitalization.
+CASE_SENSITIVE_SKILLS = frozenset(
+    {
+        "Go",
+        "R",
+        "AR",
+        "VR",
+        "BI",
+        "IDS",
+        "Chef",
+        "Puppet",
+        "Unity",
+        "Sketch",
+        "Slack",
+        "Hive",
+        "Pig",
+    }
+)
+
 CRITERIA_FIELDS = ("seniority level", "employment type", "job function", "industries")
 
 
@@ -103,15 +123,23 @@ def _nlp() -> Language:
 
 
 @cache
-def _skill_matcher() -> PhraseMatcher:
-    matcher = PhraseMatcher(_nlp().vocab)
-    matcher.add("SKILLS", [_nlp()(skill.lower()) for skill in KNOWN_SKILLS])
-    return matcher
+def _skill_matchers() -> tuple[PhraseMatcher, PhraseMatcher]:
+    """(case-insensitive matcher, exact-case matcher for CASE_SENSITIVE_SKILLS)."""
+    nlp = _nlp()
+    any_case = PhraseMatcher(nlp.vocab, attr="LOWER")
+    exact_case = PhraseMatcher(nlp.vocab, attr="ORTH")
+    any_case.add(
+        "SKILLS", [nlp.make_doc(s) for s in KNOWN_SKILLS if s not in CASE_SENSITIVE_SKILLS]
+    )
+    exact_case.add("SKILLS", [nlp.make_doc(s) for s in CASE_SENSITIVE_SKILLS])
+    return any_case, exact_case
 
 
 def extract_skills(text: str) -> list[str]:
-    doc = _nlp()(text.lower())
-    return sorted({doc[start:end].text for _, start, end in _skill_matcher()(doc)})
+    """Known skills mentioned in the text, lowercased and sorted."""
+    doc = _nlp()(text)
+    matches = [m for matcher in _skill_matchers() for m in matcher(doc)]
+    return sorted({doc[start:end].text.lower() for _, start, end in matches})
 
 
 def _get_page(url: str, params: dict | None = None) -> BeautifulSoup:
@@ -166,6 +194,8 @@ def _parse_job_card(card, location: str) -> dict | None:
 
 def fetch_jobs(role: str, locations: str | None, page: int = 1) -> list[dict]:
     """Search listings for `role` in each comma-separated location (default: worldwide)."""
+    if page < 1:
+        raise ValueError(f"page must be 1 or more, got {page}")
     location_list = [loc.strip() for loc in (locations or "Worldwide").split(",") if loc.strip()]
     start = (page - 1) * RESULTS_PER_PAGE
     jobs = []

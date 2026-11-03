@@ -13,6 +13,8 @@ COMPILE_PASSES = 2
 # The source is LLM-generated, so treat it as untrusted: no shell escape and
 # no reading or writing files outside the working directory.
 _SANDBOX_ENV = {"shell_escape": "f", "openin_any": "p", "openout_any": "p"}
+_INHERITED_ENV = ("PATH", "LANG", "LC_ALL", "TEXMFHOME", "TEXMFVAR", "TEXMFCONFIG")
+LOG_TAIL_CHARS = 2000
 
 
 class LatexUnavailableError(RuntimeError):
@@ -20,8 +22,8 @@ class LatexUnavailableError(RuntimeError):
 
 
 class LatexCompileError(RuntimeError):
-    def __init__(self, log_tail: str):
-        super().__init__("pdflatex failed to compile the document")
+    def __init__(self, reason: str, log_tail: str = ""):
+        super().__init__(f"pdflatex failed: {reason}")
         self.log_tail = log_tail
 
 
@@ -29,22 +31,31 @@ def is_available() -> bool:
     return shutil.which("pdflatex") is not None
 
 
+def _environment(work_dir: Path) -> dict[str, str]:
+    """Only what TeX needs: never pass our API keys through to the subprocess."""
+    inherited = {key: os.environ[key] for key in _INHERITED_ENV if key in os.environ}
+    return {**inherited, "HOME": str(work_dir), **_SANDBOX_ENV}
+
+
 def _run_pdflatex(work_dir: Path) -> subprocess.CompletedProcess:
-    return subprocess.run(
-        [
-            "pdflatex",
-            "-interaction=nonstopmode",
-            "-halt-on-error",
-            "-no-shell-escape",
-            "doc.tex",
-        ],
-        cwd=work_dir,
-        env={**os.environ, **_SANDBOX_ENV},
-        capture_output=True,
-        text=True,
-        timeout=COMPILE_TIMEOUT_SECONDS,
-        check=False,
-    )
+    try:
+        return subprocess.run(
+            [
+                "pdflatex",
+                "-interaction=nonstopmode",
+                "-halt-on-error",
+                "-no-shell-escape",
+                "doc.tex",
+            ],
+            cwd=work_dir,
+            env=_environment(work_dir),
+            capture_output=True,
+            text=True,
+            timeout=COMPILE_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise LatexCompileError(f"timed out after {COMPILE_TIMEOUT_SECONDS}s") from error
 
 
 def compile_pdf(latex_source: str) -> bytes:
@@ -57,5 +68,8 @@ def compile_pdf(latex_source: str) -> bytes:
         for _ in range(COMPILE_PASSES):
             result = _run_pdflatex(work_dir)
             if result.returncode != 0:
-                raise LatexCompileError(result.stdout[-2000:])
-        return (work_dir / "doc.pdf").read_bytes()
+                raise LatexCompileError("compilation errors", result.stdout[-LOG_TAIL_CHARS:])
+        pdf = work_dir / "doc.pdf"
+        if not pdf.exists():
+            raise LatexCompileError("no PDF was produced", result.stdout[-LOG_TAIL_CHARS:])
+        return pdf.read_bytes()

@@ -3,6 +3,7 @@ import shutil
 from collections.abc import Generator
 from pathlib import Path
 
+import chromadb
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 
@@ -10,7 +11,12 @@ from app.core.config import get_settings
 from app.core.resources import get_embeddings
 
 DATA_SOURCE_DIR = Path(__file__).resolve().parent / "interview_rag_data"
-QUESTION_DELIMITER = "\n---\n"
+# A line holding only '---' separates questions (trailing spaces allowed).
+QUESTION_DELIMITER = re.compile(r"^[ \t]*---[ \t]*$", re.MULTILINE)
+# C-family directives inside a question are code, not comments.
+CODE_DIRECTIVE = re.compile(r"#\s*(include|define|undef|ifn?def|if|elif|else|endif|pragma)\b")
+# '#DIFFICULTY: Medium    # note' -> 'Medium'; a '#' with no space before it (C#) is kept.
+INLINE_COMMENT = re.compile(r"\s+#.*$")
 
 
 class InterviewQuestionParser:
@@ -74,8 +80,10 @@ class InterviewQuestionParser:
 
         for _line_num, line in enumerate(lines, 1):
             stripped = line.strip()
-            # Skip lines that start with # but aren't valid metadata
-            if stripped.startswith("#") and not self.METADATA_PATTERN.match(stripped):
+            is_comment = stripped.startswith("#") and not (
+                self.METADATA_PATTERN.match(stripped) or CODE_DIRECTIVE.match(stripped)
+            )
+            if is_comment:
                 continue
             filtered.append(line)
 
@@ -89,8 +97,7 @@ class InterviewQuestionParser:
             print(f"❌ Error reading {self.file_path}: {e}")
             return
 
-        # Preprocess to remove non-metadata comments
-        content = self._preprocess_content(raw_content)
+        content = self._preprocess_content(raw_content.replace("\r\n", "\n"))
 
         # Split into sections
         sections = self.SECTION_SPLIT_PATTERN.split(content)
@@ -112,7 +119,7 @@ class InterviewQuestionParser:
             # Update metadata incrementally (key feature for your format)
             for match in meta_matches:
                 key = match.group("key").lower()
-                value = match.group("value").strip().lower()
+                value = INLINE_COMMENT.sub("", match.group("value")).strip().lower()
                 current_meta[key] = value
 
             # Remove metadata lines to isolate questions
@@ -127,7 +134,7 @@ class InterviewQuestionParser:
                 continue
 
             # Split questions and create documents
-            questions = [q.strip() for q in question_block.split(QUESTION_DELIMITER) if q.strip()]
+            questions = [q.strip() for q in QUESTION_DELIMITER.split(question_block) if q.strip()]
 
             for q_text in questions:
                 if not q_text:
@@ -150,16 +157,16 @@ class InterviewQuestionParser:
         print(f"✓ Loaded {question_counter} questions from {self.file_path.name}")
 
 
-def load_documents_from_files() -> list[Document]:
+def load_documents_from_files(data_dir: Path = DATA_SOURCE_DIR) -> list[Document]:
     """Load all interview question documents from .txt files."""
 
-    if not DATA_SOURCE_DIR.exists():
-        print(f" Directory not found: {DATA_SOURCE_DIR}")
+    if not data_dir.exists():
+        print(f" Directory not found: {data_dir}")
         return []
 
-    file_paths = list(DATA_SOURCE_DIR.glob("*.txt"))
+    file_paths = list(data_dir.glob("*.txt"))
     if not file_paths:
-        print(f"  No .txt files found in {DATA_SOURCE_DIR}")
+        print(f"  No .txt files found in {data_dir}")
         return []
 
     all_documents = []
@@ -172,18 +179,22 @@ def load_documents_from_files() -> list[Document]:
     return all_documents
 
 
-def seed_database(dry_run: bool = False) -> None:
-    """Clear and re-populate the vector store."""
-    chroma_dir = get_settings().interview_chroma_dir
-    if not dry_run and chroma_dir.exists():
-        print(f" Clearing existing database at {chroma_dir}...")
-        shutil.rmtree(chroma_dir)
+def store_has_questions(chroma_dir: Path) -> bool:
+    """True if the store exists and holds at least one document."""
+    if not chroma_dir.exists():
+        return False
+    client = chromadb.PersistentClient(path=str(chroma_dir))
+    return any(collection.count() for collection in client.list_collections())
 
+
+def seed_database(dry_run: bool = False, data_dir: Path = DATA_SOURCE_DIR) -> None:
+    """Replace the vector store with the questions in `data_dir` (kept if none load)."""
+    chroma_dir = get_settings().interview_chroma_dir
     print("📄 Loading new documents from files...")
-    documents_to_add = load_documents_from_files()
+    documents_to_add = load_documents_from_files(data_dir)
 
     if not documents_to_add:
-        print(" No documents loaded. Seeding process stopped.")
+        print(" No documents loaded. Existing store left untouched.")
         return
 
     if dry_run:
@@ -194,6 +205,9 @@ def seed_database(dry_run: bool = False) -> None:
             print(f"  ... and {len(documents_to_add) - 5} more")
         return
 
+    if chroma_dir.exists():
+        print(f" Clearing existing database at {chroma_dir}...")
+        shutil.rmtree(chroma_dir)
     print(" Creating new vector store and adding documents...")
     db = Chroma.from_documents(
         documents=documents_to_add, embedding=get_embeddings(), persist_directory=str(chroma_dir)
@@ -259,7 +273,7 @@ if __name__ == "__main__":
 
     if args.verify:
         verify_parsing()
-    elif args.if_empty and get_settings().interview_chroma_dir.exists():
+    elif args.if_empty and store_has_questions(get_settings().interview_chroma_dir):
         print("Interview question store already exists; skipping seeding.")
     else:
         seed_database(dry_run=args.dry_run)

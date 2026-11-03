@@ -38,7 +38,7 @@ for example: Technology, Software Development, Startup
 
 
 def tag_template(latex_src: str) -> list[str]:
-    """Ask the LLM which predefined tags fit this template; unknown tags are dropped."""
+    """Predefined tags the LLM picks for this template (case-insensitive, deduplicated)."""
     prompt = TAGGING_PROMPT.format(tags=", ".join(PREDEFINED_TAGS), content=latex_src)
     reply = get_llm().invoke(
         [
@@ -46,8 +46,9 @@ def tag_template(latex_src: str) -> list[str]:
             HumanMessage(content=prompt),
         ]
     )
-    suggested = (tag.strip() for tag in str(reply.content).split(","))
-    return [tag for tag in suggested if tag in PREDEFINED_TAGS]
+    canonical = {tag.lower(): tag for tag in PREDEFINED_TAGS}
+    suggested = (canonical.get(tag.strip().lower()) for tag in str(reply.content).split(","))
+    return list(dict.fromkeys(tag for tag in suggested if tag))
 
 
 def seed_templates(templates_dir: Path = TEMPLATES_DIR) -> int:

@@ -25,8 +25,13 @@ Return only a single comma-separated list, with no explanation, categories or pr
 
 
 def _parse_skill_list(text: str) -> list[str]:
-    skills = (skill.strip().strip("'\"") for skill in text.split(","))
-    return sorted({skill for skill in skills if skill}, key=str.lower)
+    """Comma-separated skills, deduplicated ignoring case (first spelling wins), sorted."""
+    unique: dict[str, str] = {}
+    for raw in text.split(","):
+        skill = raw.strip().strip("'\"").strip()
+        if skill:
+            unique.setdefault(skill.lower(), skill)
+    return sorted(unique.values(), key=str.lower)
 
 
 def _ask_llm_for_skills(system_prompt: str, user_prompt: str) -> list[str] | None:

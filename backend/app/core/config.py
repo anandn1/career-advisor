@@ -1,10 +1,12 @@
 """Application settings, loaded once from environment variables and `.env` files."""
 
+import json
 from functools import cache
 from pathlib import Path
+from typing import Annotated
 
-from pydantic import AliasChoices, Field, SecretStr
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import AliasChoices, Field, SecretStr, field_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 REPO_ROOT = BACKEND_DIR.parent
@@ -31,7 +33,25 @@ class Settings(BaseSettings):
     github_access_token: SecretStr | None = None
 
     data_dir: Path = BACKEND_DIR / "data"
-    cors_origins: list[str] = ["http://localhost:3000"]
+    cors_origins: Annotated[list[str], NoDecode] = ["http://localhost:3000"]
+
+    @field_validator("database_url")
+    @classmethod
+    def _normalize_scheme(cls, url: str) -> str:
+        """Hosting providers often hand out 'postgres://', which SQLAlchemy rejects."""
+        if url.startswith("postgres://"):
+            return "postgresql://" + url.removeprefix("postgres://")
+        return url
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def _parse_origins(cls, value):
+        """Accept a JSON list or a comma-separated string."""
+        if not isinstance(value, str):
+            return value
+        if value.strip().startswith("["):
+            return json.loads(value)
+        return [origin.strip() for origin in value.split(",") if origin.strip()]
 
     @property
     def market_chroma_dir(self) -> Path:
@@ -52,7 +72,9 @@ class Settings(BaseSettings):
     @property
     def sqlalchemy_url(self) -> str:
         """The same database, addressed through SQLAlchemy's psycopg 3 dialect."""
-        return self.database_url.replace("postgresql://", "postgresql+psycopg://", 1)
+        if self.database_url.startswith("postgresql://"):
+            return "postgresql+psycopg://" + self.database_url.removeprefix("postgresql://")
+        return self.database_url
 
 
 @cache
