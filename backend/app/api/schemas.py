@@ -72,7 +72,7 @@ class ResumeRenderRequest(BaseModel):
 
 class InterviewCreate(BaseModel):
     company_focus: CompanyFocus = "generic"
-    topics: list[str] | None = Field(None, min_length=1, max_length=10)
+    topics: list[ShortText] | None = Field(None, min_length=1, max_length=10)
 
 
 class AnswerRequest(BaseModel):

@@ -51,7 +51,7 @@ def latest_succeeded_run(db: Session, session_id: str, kind: RunKind) -> AgentRu
         select(AgentRun)
         .where(AgentRun.session_id == session_id, AgentRun.kind == kind)
         .where(AgentRun.status == RunStatus.SUCCEEDED)
-        .order_by(AgentRun.finished_at.desc())
+        .order_by(AgentRun.finished_at.desc().nulls_last(), AgentRun.created_at.desc())
         .limit(1)
     )
     return db.scalars(query).first()
@@ -88,15 +88,17 @@ def delete_expired_sessions(
 ) -> ExpiredSessions:
     """Delete sessions unseen for `ttl`; returns what was deleted (for checkpoint cleanup)."""
     cutoff = (now or utcnow()) - ttl
-    expired = select(CareerSession.id).where(CareerSession.last_seen_at < cutoff)
+    # One list of ids for both steps, so checkpoints are only deleted for deleted sessions.
+    expired_ids = list(
+        db.scalars(select(CareerSession.id).where(CareerSession.last_seen_at < cutoff))
+    )
     thread_ids = list(
         db.scalars(
             select(AgentRun.id).where(
-                AgentRun.session_id.in_(expired), AgentRun.kind == RunKind.INTERVIEW
+                AgentRun.session_id.in_(expired_ids), AgentRun.kind == RunKind.INTERVIEW
             )
         )
     )
-    expired_ids = list(db.scalars(expired))
     if expired_ids:
         db.execute(delete(AgentRun).where(AgentRun.session_id.in_(expired_ids)))
         db.execute(delete(CareerSession).where(CareerSession.id.in_(expired_ids)))

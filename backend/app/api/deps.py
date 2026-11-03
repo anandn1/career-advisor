@@ -17,7 +17,8 @@ def get_db() -> Iterator[Session]:
         yield db
 
 
-Db = Annotated[Session, Depends(get_db)]
+# scope="function": commit before the response is sent, so a 2xx means the data is saved.
+Db = Annotated[Session, Depends(get_db, scope="function")]
 
 
 def get_career_session(session_id: str, db: Db) -> CareerSession:

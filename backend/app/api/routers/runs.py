@@ -2,6 +2,7 @@
 
 import asyncio
 import tempfile
+import time
 from pathlib import Path
 from typing import Annotated
 
@@ -12,6 +13,7 @@ from fastapi import (
     Form,
     Header,
     HTTPException,
+    Request,
     Response,
     UploadFile,
     status,
@@ -38,6 +40,7 @@ from app.services import documents, github
 router = APIRouter(prefix="/sessions/{session_id}/runs", tags=["runs"])
 
 EVENT_POLL_SECONDS = 0.5
+MAX_STREAM_SECONDS = 10 * 60
 RESUME_KINDS = (RunKind.RESUME, RunKind.RESUME_RENDER)
 
 
@@ -75,6 +78,7 @@ async def _read_upload(upload: UploadFile) -> str:
             text = await asyncio.to_thread(documents.read_document_text, path)
         except documents.DocumentError as error:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error)) from error
+    text = text.replace("\x00", "")  # NUL characters cannot be stored in Postgres JSON
     if not text.strip():
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "No text found in the file")
     return text
@@ -190,6 +194,13 @@ def _run_snapshot(session_id: str, run_id: str) -> dict | None:
         }
 
 
+def _resume_index(last_event_id: str | None) -> int:
+    """Index of the first event to send after a reconnect (Last-Event-ID + 1)."""
+    if last_event_id and last_event_id.isascii() and last_event_id.isdigit():
+        return int(last_event_id) + 1
+    return 0
+
+
 def _require_streamable_run(session_id: str, run_id: str) -> dict:
     """Runs before streaming starts, so an unknown run is a plain 404 response."""
     snapshot = _run_snapshot(session_id, run_id)
@@ -202,6 +213,7 @@ def _require_streamable_run(session_id: str, run_id: str) -> dict:
 async def stream_run_events(
     session_id: str,
     run_id: str,
+    request: Request,
     snapshot: Annotated[dict, Depends(_require_streamable_run)],
     last_event_id: Annotated[str | None, Header()] = None,
 ):
@@ -209,7 +221,8 @@ async def stream_run_events(
 
     Each poll uses its own short transaction, so a long stream holds no database connection.
     """
-    sent = int(last_event_id) + 1 if last_event_id and last_event_id.isdigit() else 0
+    sent = _resume_index(last_event_id)
+    deadline = time.monotonic() + MAX_STREAM_SECONDS
     while True:
         for index in range(sent, len(snapshot["events"])):
             yield ServerSentEvent(data=snapshot["events"][index], event="progress", id=str(index))
@@ -217,6 +230,8 @@ async def stream_run_events(
         if snapshot["finished"]:
             yield ServerSentEvent(data=snapshot["run"], event="done")
             return
+        if time.monotonic() >= deadline or await request.is_disconnected():
+            return  # browsers reconnect with Last-Event-ID, so nothing is lost
         await asyncio.sleep(EVENT_POLL_SECONDS)
         snapshot = await asyncio.to_thread(_run_snapshot, session_id, run_id)
         if snapshot is None:  # deleted while streaming
