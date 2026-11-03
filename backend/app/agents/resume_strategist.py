@@ -6,11 +6,12 @@ then a full LaTeX document that follows a reference template's style.
 
 import json
 import logging
+import re
 from pathlib import Path
 
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.core.resources import get_resume_llm
 from app.services import github
@@ -32,6 +33,9 @@ LATEX_SPECIAL_CHARACTERS = {
     "~": r"\textasciitilde{}",
     "^": r"\textasciicircum{}",
 }
+_FENCED_BLOCK = re.compile(r"```[^\n]*\n(.*?)(?:\n```|$)", re.DOTALL)
+# '%' starts a comment unless escaped as '\%' ('\\%' is a line break, then a comment).
+_LATEX_COMMENT = re.compile(r"(?<!\\)((?:\\\\)*)%.*$", re.MULTILINE)
 REQUIRED_LATEX_MARKERS = (r"\documentclass", r"\begin{document}", r"\end{document}")
 
 
@@ -80,6 +84,14 @@ class ResumeProfile(BaseModel):
     education: list[Education] = Field(default_factory=list)
     work_experience: list[WorkExperience] = Field(default_factory=list)
     skills: list[str] = Field(default_factory=list)
+
+    @field_validator("github_username")
+    @classmethod
+    def _normalize_github_username(cls, value: str | None) -> str | None:
+        """Accept a username or a github.com profile URL; empty means none."""
+        if value is None or not value.strip():
+            return None
+        return github.parse_username(value)
 
 
 class ResumeDraft(BaseModel):
@@ -146,16 +158,22 @@ def escape_latex(value):
 
 
 def strip_code_fences(text: str) -> str:
-    lines = text.strip().splitlines()
-    if lines and lines[0].startswith("```"):
-        lines = lines[1:]
-    if lines and lines[-1].strip() == "```":
-        lines = lines[:-1]
-    return "\n".join(lines).strip()
+    """The LaTeX inside the first ``` fence, else the text from \\documentclass on."""
+    fenced = _FENCED_BLOCK.search(text)
+    if fenced:
+        return fenced.group(1).strip()
+    start = text.find(r"\documentclass")
+    return (text[start:] if start >= 0 else text).strip()
+
+
+def _without_comments(latex: str) -> str:
+    return _LATEX_COMMENT.sub(r"\1", latex)
 
 
 def validate_latex(latex: str) -> str:
-    missing = [marker for marker in REQUIRED_LATEX_MARKERS if marker not in latex]
+    """Require the document markers outside comments; returns the LaTeX unchanged."""
+    live = _without_comments(latex)
+    missing = [marker for marker in REQUIRED_LATEX_MARKERS if marker not in live]
     if missing:
         raise InvalidLatexError(f"Generated LaTeX is missing {', '.join(missing)}")
     return latex

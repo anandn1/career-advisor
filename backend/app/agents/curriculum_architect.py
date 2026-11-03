@@ -12,6 +12,7 @@ Graph outline:
 import json
 import logging
 import operator
+import re
 import uuid
 from functools import cache
 from pathlib import Path
@@ -48,6 +49,9 @@ MAX_SCORE = 10
 MAX_DIFFICULTY_BY_LEVEL = {"Beginner": 2, "Intermediate": 4, "Advanced": 5}
 DEFAULT_MAX_DIFFICULTY = 4
 RECURSION_LIMIT = 300
+KEYWORD_STOP_WORDS = {"and", "or", "of", "the", "for", "with", "in", "to", "a", "an"}
+# Each skill takes about 7 graph steps, so this keeps runs well under RECURSION_LIMIT.
+MAX_SKILLS = 15
 
 
 class Course(BaseModel):
@@ -107,15 +111,24 @@ def _course_to_document(course: Course) -> Document:
         f"Description: {course.description}"
     )
     metadata = course.model_dump()
-    metadata["prereqs"] = ",".join(map(str, course.prereqs))
-    metadata["topics"] = ",".join(course.topics)
+    # Chroma metadata holds only scalars, so lists are stored as JSON strings.
+    metadata["prereqs"] = json.dumps(course.prereqs)
+    metadata["topics"] = json.dumps(course.topics)
     return Document(page_content=content, metadata=metadata)
+
+
+def _stored_list(value) -> list:
+    """A list saved by _course_to_document (JSON), or by older versions (comma-separated)."""
+    text = str(value or "")
+    if text.startswith("["):
+        return json.loads(text)
+    return [item.strip() for item in text.split(",") if item.strip()]
 
 
 def _document_to_course(document: Document) -> Course:
     metadata = dict(document.metadata)
-    metadata["prereqs"] = [int(p) for p in str(metadata.get("prereqs", "")).split(",") if p]
-    metadata["topics"] = [t.strip() for t in str(metadata.get("topics", "")).split(",") if t]
+    metadata["prereqs"] = [int(p) for p in _stored_list(metadata.get("prereqs"))]
+    metadata["topics"] = _stored_list(metadata.get("topics"))
     return Course(**metadata)
 
 
@@ -169,6 +182,7 @@ class CurriculumGraphState(TypedDict, total=False):
     draft_path: PersonalizedLearningPath | None
     structured_critique: Critique | None
     revision_count: Annotated[int, operator.add]
+    submission_accepted: bool
 
 
 # --- Prompts ---
@@ -270,6 +284,14 @@ def entry_node(state: CurriculumGraphState) -> dict:
     }
 
 
+def _unique_ignoring_case(items: list[str]) -> list[str]:
+    """First spelling of each item, in first-seen order, ignoring case."""
+    unique: dict[str, str] = {}
+    for item in items:
+        unique.setdefault(item.lower(), item)
+    return list(unique.values())
+
+
 def planner_node(state: CurriculumGraphState) -> dict:
     chain = PLANNER_PROMPT | get_llm().with_structured_output(PlannerOutput)
     output = chain.invoke(
@@ -278,7 +300,7 @@ def planner_node(state: CurriculumGraphState) -> dict:
     logger.info("Planner found %d skills to cover", len(output.skills_to_find))
     return {
         "user_profile": output.user_profile,
-        "skills_to_find": output.skills_to_find,
+        "skills_to_find": _unique_ignoring_case(output.skills_to_find)[:MAX_SKILLS],
     }
 
 
@@ -296,23 +318,30 @@ def iteration_controller_node(state: CurriculumGraphState) -> dict:
     }
 
 
-def _course_mentions_any(course: Course, keywords: list[str]) -> bool:
-    haystacks = [
-        course.title.lower(),
-        course.description.lower(),
-        *(t.lower() for t in course.topics),
-    ]
-    return any(keyword in text for keyword in keywords for text in haystacks)
+def _mentions_word(text: str, keyword: str) -> bool:
+    """Whole-word match: 'go' matches 'Go basics' but not 'Google'; 'c' does not match 'C++'."""
+    pattern = rf"(?<![a-z0-9+#]){re.escape(keyword)}(?![a-z0-9+#])"
+    return re.search(pattern, text) is not None
+
+
+def _skill_keywords(skill: str) -> list[str]:
+    words = skill.lower().split()
+    return [word for word in words if word not in KEYWORD_STOP_WORDS] or words
+
+
+def _course_mentions_all(course: Course, keywords: list[str]) -> bool:
+    """Every keyword appears as a whole word somewhere in the course's text."""
+    text = " | ".join([course.title, course.description, *course.topics]).lower()
+    return all(_mentions_word(text, keyword) for keyword in keywords)
 
 
 def fetch_course_catalog(state: CurriculumGraphState) -> dict:
-    """Similar courses from the catalog, keeping those that mention the skill's keywords."""
+    """Catalog courses that mention the skill; empty (so a web search follows) if none do."""
     skill = state["current_skill"]
     documents = get_course_catalog().similarity_search(skill, k=CATALOG_CANDIDATES)
     courses = [_document_to_course(doc) for doc in documents]
-    keywords = skill.lower().split()
-    matching = [course for course in courses if _course_mentions_any(course, keywords)]
-    return {"course_catalog": matching or courses}
+    keywords = _skill_keywords(skill)
+    return {"course_catalog": [c for c in courses if _course_mentions_all(c, keywords)]}
 
 
 def web_search_for_courses(state: CurriculumGraphState) -> dict:
@@ -342,9 +371,13 @@ def process_and_store_courses(state: CurriculumGraphState) -> dict:
     except Exception as error:  # malformed structured output from the LLM
         logger.warning("Could not extract courses from search results: %s", error)
         return {"course_catalog": []}
-    if courses:
-        _store_courses(get_course_catalog(), courses)
-    return {"course_catalog": courses}
+    unique = list({course.id: course for course in courses}.values())
+    if unique:
+        try:
+            _store_courses(get_course_catalog(), unique)
+        except Exception as error:  # caching is best effort; still use the courses now
+            logger.warning("Could not store courses in the catalog: %s", error)
+    return {"course_catalog": unique}
 
 
 # --- Parallel evaluation nodes ---
@@ -364,10 +397,11 @@ def check_prerequisites(state: CurriculumGraphState) -> dict:
 
 
 def _interest_score(interests: set[str], topics: set[str]) -> float:
-    overlap = interests & topics
-    if not overlap:
+    """Base score for any course, rising toward 1.0 as more interests overlap."""
+    if not interests:
         return NO_INTEREST_OVERLAP_SCORE
-    return min(len(overlap) / len(interests) * INTEREST_SCORE_BOOST, 1.0)
+    overlap_share = min(len(interests & topics) / len(interests) * INTEREST_SCORE_BOOST, 1.0)
+    return NO_INTEREST_OVERLAP_SCORE + (1 - NO_INTEREST_OVERLAP_SCORE) * overlap_share
 
 
 def match_interests(state: CurriculumGraphState) -> dict:
@@ -470,57 +504,66 @@ def _first_prompt(state: CurriculumGraphState) -> list[BaseMessage]:
 def architect_node(state: CurriculumGraphState) -> dict:
     """Ask the LLM to submit the path via the tool, nudging it once if it does not."""
     is_first_pass = state.get("revision_count", 0) == 0
-    messages = _first_prompt(state) if is_first_pass else list(state["messages"])
+    history = _first_prompt(state) if is_first_pass else list(state["messages"])
+    already_in_state = 0 if is_first_pass else len(history)
     model = get_llm().bind_tools([submit_learning_path])
-    response = None
-    for _ in range(MAX_ARCHITECT_ATTEMPTS):
-        response = model.invoke(messages)
-        if getattr(response, "tool_calls", None):
+    for attempt in range(1, MAX_ARCHITECT_ATTEMPTS + 1):
+        response = model.invoke(history)
+        history.append(response)
+        if getattr(response, "tool_calls", None) or attempt == MAX_ARCHITECT_ATTEMPTS:
             break
-        messages += [
-            response,
-            HumanMessage(content="You must call the submit_learning_path tool. Try again."),
-        ]
-    new_messages = messages + [response] if is_first_pass else [response]
-    return {"messages": new_messages}
+        history.append(
+            HumanMessage(content="You must call the submit_learning_path tool. Try again.")
+        )
+    return {"messages": history[already_in_state:]}
 
 
 def _path_from_tool_args(args) -> PersonalizedLearningPath:
+    """Parse the tool call's arguments; raises ValueError for anything malformed."""
     if isinstance(args, str):
         args = json.loads(args)
+    if not isinstance(args, dict):
+        raise ValueError("submission must be a JSON object")
     path = args.get("path", args)
     if isinstance(path, str):
         path = json.loads(path)
+    if not isinstance(path, dict):
+        raise ValueError("'path' must be a JSON object")
     return PersonalizedLearningPath(**path)
 
 
-def _rejected_submission(reason: str, tool_call_id: str) -> dict:
+def _tool_replies(tool_calls: list[dict], first_reply: str) -> list[ToolMessage]:
+    """One reply per tool call (providers reject unanswered calls); only the first counts."""
+    ignored = "Ignored: only one submission is processed per turn."
+    return [
+        ToolMessage(content=first_reply if i == 0 else ignored, tool_call_id=call["id"])
+        for i, call in enumerate(tool_calls)
+    ]
+
+
+def _rejected_submission(reason: str, tool_calls: list[dict]) -> dict:
     return {
         "structured_critique": Critique(is_approved=False, revisions_needed=reason),
-        "messages": [
-            ToolMessage(content=f"Submission failed: {reason}", tool_call_id=tool_call_id)
-        ],
+        "messages": _tool_replies(tool_calls, f"Submission failed: {reason}"),
         "revision_count": 1,
+        "submission_accepted": False,
     }
 
 
 def handle_submission_node(state: CurriculumGraphState) -> dict:
-    tool_calls = getattr(state["messages"][-1], "tool_calls", None)
+    tool_calls = getattr(state["messages"][-1], "tool_calls", None) or []
     if not tool_calls:
         reason = "Call submit_learning_path with user_summary, skill_gaps and ALL recommendations."
-        return {
-            "structured_critique": Critique(is_approved=False, revisions_needed=reason),
-            "revision_count": 1,
-        }
-    call = tool_calls[0]
+        return _rejected_submission(reason, [])
     try:
-        draft = _path_from_tool_args(call["args"])
+        draft = _path_from_tool_args(tool_calls[0]["args"])
     except (ValueError, TypeError, KeyError) as error:
-        return _rejected_submission(f"Could not parse your submission: {error}", call["id"])
+        return _rejected_submission(f"Could not parse your submission: {error}", tool_calls)
     logger.info("Draft learning path has %d recommendations", len(draft.recommendations))
     return {
         "draft_path": draft,
-        "messages": [ToolMessage(content="Learning path submitted.", tool_call_id=call["id"])],
+        "messages": _tool_replies(tool_calls, "Learning path submitted."),
+        "submission_accepted": True,
     }
 
 
@@ -556,7 +599,7 @@ def route_after_scoring(state: CurriculumGraphState) -> str:
 
 
 def route_after_submission(state: CurriculumGraphState) -> str:
-    if state.get("draft_path"):
+    if state.get("submission_accepted"):
         return "critic"
     return END if state["revision_count"] >= MAX_REVISIONS else "prepare_revision"
 
@@ -627,8 +670,10 @@ def build_learning_path(skill_gap_analysis: str, resume_inventory: str) -> Curri
 
 
 SOFT_SKILLS = {
-    "communication", "teamwork", "collaboration", "problem solving", "scrum", "agile",
-    "user experience", "user interface", "leadership", "presentation", "time management",
+    "communication", "teamwork", "collaboration", "problem solving", "problem-solving",
+    "scrum", "agile", "agile methodologies", "kanban", "critical thinking",
+    "project management", "user experience", "user interface", "leadership",
+    "presentation", "time management",
 }  # fmt: skip
 
 

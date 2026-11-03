@@ -12,7 +12,7 @@ from pathlib import Path
 from app.agents import curriculum_architect, interview_coach, job_market_analyst, skills
 from app.agents.resume_strategist import ContactInfo, ResumeProfile, generate_resume
 from app.core.config import get_settings
-from app.services import latex
+from app.services import github, latex
 
 TOP_GAPS_SHOWN = 10
 COMMANDS = {
@@ -54,7 +54,11 @@ def collect_background(session: CliSession) -> None:
         else:
             print("File not found; skipping.")
     elif choice == "2":
-        username = ask("GitHub username").rstrip("/").split("/")[-1]
+        try:
+            username = github.parse_username(ask("GitHub username or profile URL"))
+        except github.InvalidUsernameError as error:
+            print(f"{error}; skipping.")
+            return
         session.github_username = username
         session.user_skills = skills.extract_skills_from_github(username)
     print(f"Skills: {', '.join(session.user_skills) or 'none found'}")

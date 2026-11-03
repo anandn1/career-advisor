@@ -4,8 +4,10 @@ Pipeline: search the cached postings in Chroma, scrape fresh postings from
 LinkedIn (and cache them), then compare required skills with the user's.
 """
 
+import json
 import logging
 import re
+from datetime import date
 from functools import cache
 from typing import Any, TypedDict
 
@@ -27,10 +29,10 @@ logger = logging.getLogger(__name__)
 CANDIDATE_POSTINGS = 15
 RERANKED_POSTINGS = 5
 POSTINGS_TO_SCRAPE = 5
-MIN_SKILL_LENGTH = 3
 DEFAULT_TITLE = "Untitled role"
 
 _text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
+_WORD = re.compile(r"[a-z0-9]+")
 _TITLE_LINE = re.compile(r"(?:job title|title|position):\s*([^\n\r]+)", re.IGNORECASE)
 
 
@@ -73,12 +75,24 @@ def _posting_to_document(posting: dict[str, Any]) -> Document:
         "location": posting.get("location", "N/A"),
         "seniority": posting.get("seniority level", "N/A"),
         "title": posting.get("title", "N/A"),
+        "scraped_at": date.today().isoformat(),
+        "skills": json.dumps(posting.get("skills required", [])),
     }
     return Document(page_content=content, metadata=metadata)
 
 
 def _locations_match(wanted: str, found: str) -> bool:
-    return wanted in found or found in wanted
+    """Any wanted location (comma-separated) matches the posting's location."""
+    return any(_location_matches(place, found) for place in wanted.split(","))
+
+
+def _location_matches(wanted: str, found: str) -> bool:
+    """Whole-word match either way: 'Pune' matches 'Pune, Maharashtra, India'."""
+    wanted_words = set(_WORD.findall(wanted.lower()))
+    found_words = set(_WORD.findall(found.lower()))
+    if not wanted_words or not found_words:
+        return False
+    return wanted_words <= found_words or found_words <= wanted_words
 
 
 def _skills_from_content(content: str) -> list[str]:
@@ -86,11 +100,22 @@ def _skills_from_content(content: str) -> list[str]:
         return []
     skills_line = content.split("skills required:")[-1]
     skills = (skill.strip().strip(",.") for skill in skills_line.split(","))
-    return [skill for skill in skills if len(skill) >= MIN_SKILL_LENGTH]
+    return [skill for skill in skills if skill]
+
+
+def _cached_skills(document: Document) -> list[str]:
+    """Skills from metadata (JSON, keeps commas inside skills), else from older content."""
+    try:
+        stored = json.loads(document.metadata.get("skills") or "null")
+    except (TypeError, ValueError):
+        stored = None
+    if isinstance(stored, list) and all(isinstance(skill, str) for skill in stored):
+        return [skill.lower() for skill in stored]
+    return _skills_from_content(document.page_content.lower())
 
 
 def _title_from(document: Document) -> str:
-    title = document.metadata.get("title", "N/A")
+    title = document.metadata.get("title") or "N/A"
     if title.lower() != "n/a":
         return title
     match = _TITLE_LINE.search(document.page_content)
@@ -102,7 +127,9 @@ def _document_to_job(document: Document) -> dict:
         "title": _title_from(document),
         "company": document.metadata.get("company", "N/A"),
         "location": document.metadata.get("location", "N/A"),
-        "skills_required": _skills_from_content(document.page_content.lower()),
+        "skills_required": _cached_skills(document),
+        "source": "cached",
+        "scraped_at": document.metadata.get("scraped_at"),
     }
 
 
@@ -110,7 +137,11 @@ def _dedupe_jobs(jobs: list[dict]) -> list[dict]:
     seen = set()
     unique = []
     for job in jobs:
-        key = (job["company"], tuple(sorted(s.lower() for s in job["skills_required"])))
+        key = (
+            str(job.get("title", "")).lower(),
+            job["company"],
+            tuple(sorted(s.lower() for s in job["skills_required"])),
+        )
         if key not in seen:
             seen.add(key)
             unique.append(job)
@@ -119,12 +150,11 @@ def _dedupe_jobs(jobs: list[dict]) -> list[dict]:
 
 def search_cached_postings(state: JobMarketState) -> JobMarketState:
     """Find previously scraped postings for the role in the requested location."""
-    wanted_location = state["location"].lower()
     documents = _retriever().invoke(f"{state['role']} jobs in {state['location']}")
     jobs = [
         _document_to_job(doc)
         for doc in documents
-        if _locations_match(wanted_location, doc.metadata.get("location", "").lower())
+        if _locations_match(state["location"], doc.metadata.get("location") or "")
     ]
     return {"job_data": _dedupe_jobs(jobs)}
 
@@ -141,12 +171,14 @@ def _scrape_posting(summary: dict) -> tuple[dict, Document] | None:
         "company": summary.get("company", "N/A"),
         "location": summary.get("location", "N/A"),
         "skills_required": details.get("skills required", []),
+        "source": "live",
+        "scraped_at": date.today().isoformat(),
     }
     return job, _posting_to_document(posting)
 
 
 def scrape_fresh_postings(state: JobMarketState) -> JobMarketState:
-    """Scrape live postings, cache them in Chroma, and add them to the results."""
+    """Scrape live postings and cache them; cached results remain if scraping finds none."""
     summaries = job_scraper.fetch_jobs(state["role"], state["location"])
     scraped = [
         result
@@ -155,8 +187,12 @@ def scrape_fresh_postings(state: JobMarketState) -> JobMarketState:
     ]
     if scraped:
         chunks = _text_splitter.split_documents([document for _, document in scraped])
-        _market_store().add_documents(chunks)
-    return {"job_data": state.get("job_data", []) + [job for job, _ in scraped]}
+        try:
+            _market_store().add_documents(chunks)
+        except Exception as error:  # caching is best effort; keep the live results
+            logger.warning("Could not cache scraped postings: %s", error)
+    live_jobs = [job for job, _ in scraped]
+    return {"job_data": _dedupe_jobs(live_jobs + state.get("job_data", []))}
 
 
 def _normalize_skill(skill: str) -> str:

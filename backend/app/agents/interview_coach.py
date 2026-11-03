@@ -40,6 +40,10 @@ COMPANIES = ("amazon", "apple", "google", "meta", "microsoft", "netflix", "nvidi
 ALL_DIFFICULTIES = ["easy", "medium", "hard"]
 STOP_WORDS = {"stop", "done", "end", "finish", "quit"}
 GOOD_GRADES = {"excellent", "good"}
+GRADES = ("excellent", "good", "moderate", "bad")
+DEFAULT_GRADE = "moderate"
+EVALUATION_ERROR = "error"
+MAX_FOLLOW_UPS_PER_QUESTION = 2
 NO_QUESTION_IDS = {"NONE", "ERROR", "DONE"}
 DEFAULT_TOPICS = ["Data Structures & Algorithms", "System Design"]
 
@@ -49,6 +53,8 @@ TOPIC_FOR_KEYWORD = {
     "react": "Frontend Frameworks",
     "vue": "Frontend Frameworks",
     "aws": "Cloud & DevOps",
+    "gcp": "Cloud & DevOps",
+    "google cloud": "Cloud & DevOps",
     "azure": "Cloud & DevOps",
     "docker": "Cloud & DevOps",
     "kubernetes": "Cloud & DevOps",
@@ -85,6 +91,7 @@ class InterviewAgentState(MessagesState):
     question_count: int
     topic_performance: dict[str, list[dict]]
     current_difficulty_per_topic: dict[str, list[str]]
+    follow_up_count: int
 
 
 EVALUATION_PROMPT = PromptTemplate.from_template(
@@ -131,11 +138,22 @@ Example: if the answer was about sharding, ask "How would you handle a hot shard
 Your follow-up question:""")
 
 
+_KEYWORDS_LONGEST_FIRST = sorted(TOPIC_FOR_KEYWORD, key=len, reverse=True)
+
+
+def _has_word(text: str, keyword: str) -> bool:
+    """Whole-word match, so 'go' is not found in 'mongodb' or 'algorithms'."""
+    pattern = rf"(?<![a-z0-9+#]){re.escape(keyword)}(?![a-z0-9+#])"
+    return re.search(pattern, text.lower()) is not None
+
+
 def topics_for_skill_gaps(skill_gaps: list[str]) -> list[str]:
     """Map skill gaps to interview topics; System Design is always included."""
     topics = set()
     for gap in skill_gaps[:SKILL_GAPS_TO_MAP]:
-        topic = next((t for kw, t in TOPIC_FOR_KEYWORD.items() if kw in gap.lower()), None)
+        topic = next(
+            (TOPIC_FOR_KEYWORD[kw] for kw in _KEYWORDS_LONGEST_FIRST if _has_word(gap, kw)), None
+        )
         if topic:
             topics.add(topic)
     if not topics:
@@ -154,22 +172,20 @@ def _easier(difficulties: list[str]) -> list[str]:
     return difficulties if set(difficulties) == {"easy"} else ["easy", "medium"]
 
 
-def _last_two_at(evaluations: list[dict], difficulty: str) -> list[dict]:
-    matching = [e for e in evaluations if e["difficulty"] == difficulty]
-    return matching[-2:] if len(matching) >= 2 else []
-
-
 def adapt_difficulty(topic_performance: dict, current: dict, topics: list[str]) -> dict:
-    """Two bad hard answers -> easier; two excellent easy answers -> harder."""
+    """Adapt from the topic's last two answers.
+
+    Both bad on hard questions -> easier; both excellent on easy ones -> harder.
+    """
     updated = dict(current)
     for topic in (t.lower() for t in topics):
-        evaluations = topic_performance.get(topic, [])
+        recent = topic_performance.get(topic, [])[-2:]
+        if len(recent) < 2:
+            continue
         difficulties = current.get(topic, ALL_DIFFICULTIES)
-        hard = _last_two_at(evaluations, "hard")
-        easy = _last_two_at(evaluations, "easy")
-        if hard and all(e["evaluation"] == "bad" for e in hard):
+        if all(e["difficulty"] == "hard" and e["evaluation"] == "bad" for e in recent):
             updated[topic] = _easier(difficulties)
-        elif easy and all(e["evaluation"] == "excellent" for e in easy):
+        elif all(e["difficulty"] == "easy" and e["evaluation"] == "excellent" for e in recent):
             updated[topic] = _harder(difficulties)
         if updated.get(topic, difficulties) != difficulties:
             logger.info("Difficulty for %s: %s -> %s", topic, difficulties, updated[topic])
@@ -197,22 +213,37 @@ def _companies_for(company_focus: str) -> list[str]:
     return list(COMPANIES) if company_focus == "all" else [company_focus]
 
 
-def _question_filter(state: InterviewAgentState, difficulties: list[str] | None) -> dict:
+def _topic_condition(topics: list[str], difficulty_map: dict | None) -> dict:
+    """Topic filter; with a difficulty map, each topic keeps its own allowed difficulties."""
+    names = [t.lower() for t in topics]
+    if difficulty_map is None:
+        return {"topic": {"$in": names}}
+    per_topic = [
+        {
+            "$and": [
+                {"topic": name},
+                {"difficulty": {"$in": difficulty_map.get(name, ALL_DIFFICULTIES)}},
+            ]
+        }
+        for name in names
+    ]
+    return per_topic[0] if len(per_topic) == 1 else {"$or": per_topic}
+
+
+def _question_filter(state: InterviewAgentState, difficulty_map: dict | None) -> dict:
     conditions = [
-        {"topic": {"$in": [t.lower() for t in state["topic_list"]]}},
+        _topic_condition(state["topic_list"], difficulty_map),
         {"company": {"$in": _companies_for(state["company_focus"])}},
     ]
-    if difficulties:
-        conditions.append({"difficulty": {"$in": difficulties}})
     if state.get("covered_questions"):
         conditions.append({"question_id": {"$nin": state["covered_questions"]}})
     return {"$and": conditions}
 
 
-def _retrieve_questions(state: InterviewAgentState, difficulties: list[str]):
-    """Search with the difficulty filter, then without it if nothing matches."""
+def _retrieve_questions(state: InterviewAgentState, difficulty_map: dict):
+    """Search with each topic's difficulties, then without difficulty limits."""
     query = f"{state['company_focus']} interview questions on {', '.join(state['topic_list'])}"
-    for allowed in (difficulties, None):
+    for allowed in (difficulty_map, None):
         try:
             results = _retriever(_question_filter(state, allowed)).invoke(query)
         except Exception as error:  # Chroma/Cohere failures: try the relaxed filter
@@ -244,6 +275,7 @@ def start_interview_node(state: InterviewAgentState) -> dict:
         "evaluation_report": [],
         "topic_performance": {},
         "current_difficulty_per_topic": {},
+        "follow_up_count": 0,
     }
 
 
@@ -253,10 +285,7 @@ def generate_question_node(state: InterviewAgentState) -> dict:
         state.get("current_difficulty_per_topic", {}),
         state["topic_list"],
     )
-    allowed = sorted(
-        {d for t in state["topic_list"] for d in difficulty_map.get(t.lower(), ALL_DIFFICULTIES)}
-    )
-    results = _retrieve_questions(state, allowed)
+    results = _retrieve_questions(state, difficulty_map)
     if not results:
         return {
             "messages": [SystemMessage(content="No more questions available.")],
@@ -270,6 +299,7 @@ def generate_question_node(state: InterviewAgentState) -> dict:
         "current_question_difficulty": chosen.metadata.get("difficulty", "medium"),
         "question_count": state.get("question_count", 0) + 1,
         "current_difficulty_per_topic": difficulty_map,
+        "follow_up_count": 0,
     }
 
 
@@ -284,7 +314,10 @@ def ask_follow_up_node(state: InterviewAgentState) -> dict:
     except Exception as error:  # provider errors: fall back to moving on
         logger.warning("Follow-up generation failed: %s", error)
         follow_up = "Let's move on."
-    return {"messages": [AIMessage(content=follow_up, name=INTERVIEWER)]}
+    return {
+        "messages": [AIMessage(content=follow_up, name=INTERVIEWER)],
+        "follow_up_count": state.get("follow_up_count", 0) + 1,
+    }
 
 
 def wait_for_answer_node(state: InterviewAgentState) -> dict:
@@ -300,12 +333,19 @@ def _last_question_and_answer(messages: list[BaseMessage]) -> tuple[str, str] | 
         elif answer is not None and isinstance(message, AIMessage) and message.name == INTERVIEWER:
             question = message.content
             break
-    return (question, answer) if question and answer else None
+    # An empty answer is still an answer: it gets graded rather than ignored.
+    return (question, answer) if question is not None and answer is not None else None
 
 
 def _parse_field(name: str, text: str, default: str, flags: int = 0) -> str:
-    match = re.search(rf"{name}:\s*(.+)", text, re.IGNORECASE | flags)
-    return match.group(1).strip() if match else default
+    """Value after 'NAME:', tolerating Markdown emphasis such as '**NAME:** value'."""
+    match = re.search(rf"{name}[*_\s]*:[*_\s]*(.+)", text, re.IGNORECASE | flags)
+    return match.group(1).strip().strip("*_ ") if match else default
+
+
+def _parse_grade(text: str) -> str:
+    value = _parse_field("GRADE", text, "").lower()
+    return next((g for g in GRADES if re.search(rf"\b{g}\b", value)), DEFAULT_GRADE)
 
 
 def _grade_answer(question: str, answer: str) -> tuple[str, str, str]:
@@ -316,9 +356,9 @@ def _grade_answer(question: str, answer: str) -> tuple[str, str, str]:
         )
     except Exception as error:  # provider errors: record and carry on
         logger.warning("Answer evaluation failed: %s", error)
-        return "error", "unknown", str(error)
+        return EVALUATION_ERROR, "unknown", str(error)
     return (
-        _parse_field("GRADE", text, "moderate").lower(),
+        _parse_grade(text),
         _parse_field("SKILL", text, "general").lower(),
         _parse_field("FEEDBACK", text, "No feedback.", re.DOTALL),
     )
@@ -395,7 +435,10 @@ def decide_action_router(
     if _user_asked_to_stop(state["messages"]) or not state.get("evaluation_report"):
         return "update_coverage"
     last = state["evaluation_report"][-1]
-    if last["evaluation"] in GOOD_GRADES:
+    if last["question_id"] != state.get("current_question_id"):
+        return "update_coverage"
+    out_of_follow_ups = state.get("follow_up_count", 0) >= MAX_FOLLOW_UPS_PER_QUESTION
+    if last["evaluation"] in GOOD_GRADES | {EVALUATION_ERROR} or out_of_follow_ups:
         return "update_coverage"
     try:
         prompt = ACTION_CHOICE_PROMPT.format(
@@ -406,6 +449,13 @@ def decide_action_router(
         logger.warning("Follow-up decision failed: %s", error)
         return "update_coverage"
     return "ask_follow_up" if "FOLLOW_UP" in choice else "update_coverage"
+
+
+def route_after_question(
+    state: InterviewAgentState,
+) -> Literal["wait_for_answer", "synthesize_and_update"]:
+    out_of_questions = state.get("current_question_id") in {"NONE", "ERROR"}
+    return "synthesize_and_update" if out_of_questions else "wait_for_answer"
 
 
 def should_continue_router(
@@ -448,7 +498,7 @@ def build_interview_graph() -> StateGraph:
 
     graph.add_edge(START, "start_interview")
     graph.add_edge("start_interview", "generate_question")
-    graph.add_edge("generate_question", "wait_for_answer")
+    graph.add_conditional_edges("generate_question", route_after_question)
     graph.add_edge("wait_for_answer", "evaluate_answer")
     graph.add_conditional_edges("evaluate_answer", decide_action_router)
     graph.add_edge("ask_follow_up", "wait_for_answer")
@@ -510,6 +560,10 @@ def _turn_from(result: dict) -> InterviewTurn:
     )
 
 
+class InterviewStateError(RuntimeError):
+    """The thread is not in a state that allows this call."""
+
+
 def _thread(thread_id: str) -> dict:
     return {"configurable": {"thread_id": thread_id}}
 
@@ -520,7 +574,11 @@ def start_interview(
     company_focus: str,
     focus: InterviewFocus = "gaps",
 ) -> InterviewTurn:
-    """Begin a session on `thread_id`; returns the first question."""
+    """Begin a session on a new `thread_id`; returns the first question."""
+    if not topics:
+        raise ValueError("topic_list is required")
+    if get_interview_graph().get_state(_thread(thread_id)).values:
+        raise InterviewStateError(f"Interview {thread_id!r} already exists")
     initial = {
         "interview_focus": focus,
         "company_focus": company_focus,
@@ -532,6 +590,8 @@ def start_interview(
 
 def submit_answer(thread_id: str, answer: str) -> InterviewTurn:
     """Resume the paused session with the candidate's answer ('stop' ends it)."""
+    if not get_interview_graph().get_state(_thread(thread_id)).next:
+        raise InterviewStateError(f"Interview {thread_id!r} is not waiting for an answer")
     resume = Command(resume={"messages": [HumanMessage(content=answer)]})
     return _turn_from(get_interview_graph().invoke(resume, config=_thread(thread_id)))
 

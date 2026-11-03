@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Agentic AI Career Advisor (IIIT Dharwad "Agentic AI" course project): LangGraph agents that analyze the job market for a role, find skill gaps, build a learning path, write a tailored LaTeX resume and run an adaptive mock interview. The agents are being put behind a FastAPI API with a Next.js frontend and Docker deployment; see the phase plan in `architect-plan.md` if present (local, gitignored).
 
 - Backend agents are refactored into plain, parameter-driven functions. There is no FastAPI app, frontend or Docker setup yet; `app/cli.py` is the only front-end.
-- Tooling: ruff configured; pytest configured but there are no tests yet.
+- Tooling: ruff, plus a pytest suite in `backend/tests/` (isolated: no .env, network, LLM or Postgres).
 
 ## Branching
 
@@ -23,7 +23,7 @@ The Python project lives in `backend/` and uses **uv** (Python 3.12, CPU-only to
 uv sync                                                 # install (creates backend/.venv)
 uv run ruff check app migrations                        # lint
 uv run ruff format app migrations                       # format
-uv run pytest                                           # tests (tests/ is empty so far)
+uv run pytest                                           # tests (~4s, fully offline)
 uv run pytest tests/test_x.py::test_name                # a single test
 
 uv run alembic upgrade head                             # create/upgrade DB tables

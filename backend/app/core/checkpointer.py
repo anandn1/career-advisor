@@ -20,6 +20,10 @@ def get_checkpointer() -> PostgresSaver:
         kwargs={"autocommit": True, "prepare_threshold": 0, "row_factory": dict_row},
         open=True,
     )
-    checkpointer = PostgresSaver(pool)
-    checkpointer.setup()
+    try:
+        checkpointer = PostgresSaver(pool)
+        checkpointer.setup()
+    except Exception:
+        pool.close()
+        raise
     return checkpointer

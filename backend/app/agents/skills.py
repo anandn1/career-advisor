@@ -25,8 +25,13 @@ Return only a single comma-separated list, with no explanation, categories or pr
 
 
 def _parse_skill_list(text: str) -> list[str]:
-    skills = (skill.strip().strip("'\"") for skill in text.split(","))
-    return sorted({skill for skill in skills if skill}, key=str.lower)
+    """Comma-separated skills, deduplicated ignoring case (first spelling wins), sorted."""
+    unique: dict[str, str] = {}
+    for raw in text.split(","):
+        skill = raw.strip().strip("'\"").strip()
+        if skill:
+            unique.setdefault(skill.lower(), skill)
+    return sorted(unique.values(), key=str.lower)
 
 
 def _ask_llm_for_skills(system_prompt: str, user_prompt: str) -> list[str] | None:
@@ -45,7 +50,7 @@ def extract_skills_from_text(resume_text: str) -> list[str]:
     llm_skills = _ask_llm_for_skills(
         RESUME_SYSTEM_PROMPT, f"Here is the resume text:\n\n{resume_text}"
     )
-    return llm_skills if llm_skills is not None else match_known_skills(resume_text)
+    return llm_skills or match_known_skills(resume_text)
 
 
 def extract_skills_from_resume(path: Path) -> list[str]:
@@ -57,4 +62,4 @@ def extract_skills_from_github(username: str) -> list[str]:
     readme = github.fetch_profile_readme(username) or "No README content provided."
     user_prompt = f'Repo Languages: "{", ".join(languages)}"\nProfile README: "{readme}"'
     llm_skills = _ask_llm_for_skills(GITHUB_SYSTEM_PROMPT, user_prompt)
-    return llm_skills if llm_skills is not None else languages
+    return llm_skills or languages
