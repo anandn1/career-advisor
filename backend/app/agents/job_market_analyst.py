@@ -21,6 +21,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
 from app.core.config import get_settings
+from app.core.graphs import StepCallback, run_graph
 from app.core.resources import get_chroma, get_reranker
 from app.services import job_scraper
 
@@ -255,6 +256,9 @@ def initial_state(role: str, location: str, user_skills: list[str]) -> JobMarket
     }
 
 
-def run_job_market_analysis(role: str, location: str, user_skills: list[str]) -> JobMarketState:
+def run_job_market_analysis(
+    role: str, location: str, user_skills: list[str], on_step: StepCallback | None = None
+) -> JobMarketState:
     """Run the whole pipeline and return the final state (job_data, skill_gap_data)."""
-    return get_job_market_graph().invoke(initial_state(role, location, user_skills))
+    state = initial_state(role, location, user_skills)
+    return run_graph(get_job_market_graph(), state, on_step=on_step)

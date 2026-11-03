@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Agentic AI Career Advisor (IIIT Dharwad "Agentic AI" course project): LangGraph agents that analyze the job market for a role, find skill gaps, build a learning path, write a tailored LaTeX resume and run an adaptive mock interview. The agents are being put behind a FastAPI API with a Next.js frontend and Docker deployment; see the phase plan in `architect-plan.md` if present (local, gitignored).
 
-- Backend agents are refactored into plain, parameter-driven functions. There is no FastAPI app, frontend or Docker setup yet; `app/cli.py` is the only front-end.
+- Backend: FastAPI app in `app/main.py` over the agents (plus `app/cli.py` for terminal use). No frontend or Docker setup yet.
 - Tooling: ruff, plus a pytest suite in `backend/tests/` (isolated: no .env, network, LLM or Postgres).
 
 ## Branching
@@ -30,7 +30,9 @@ uv run alembic upgrade head                             # create/upgrade DB tabl
 uv run python -m app.db.seed_templates                  # load templates/*.tex (LLM-tagged)
 uv run python -m app.agents.ingestion.seed_interview_db # build interview question store
 #   flags: --verify (parse only), --dry-run, --if-empty (skip if store exists)
+uv run uvicorn app.main:app --reload                    # API on :8000 (docs at /docs)
 uv run python -m app.cli                                # interactive terminal front-end
+TEST_DATABASE_URL=postgresql://... uv run pytest -m postgres  # Postgres-only tests (drops that DB's schema)
 ```
 
 New migrations: `uv run alembic revision --autogenerate -m "..."` (needs a reachable database).
@@ -59,3 +61,5 @@ All settings come from `app/core/config.py` (`Settings`, pydantic-settings), rea
 **Database (`app/db/`)**: SQLAlchemy 2 models (`ResumeTemplate`, `Tag`, link table `resume_template_tags`), `session_scope()` for transactions, queries in `templates.py`, Alembic migrations in `backend/migrations/` (env.py takes the URL from settings).
 
 **Data files**: interview questions are `.txt` files in `app/agents/ingestion/interview_rag_data/`, using `#COMPANY:` / `#TOPIC:` / `#DIFFICULTY:` headers (which carry over to later sections) and `---` between questions. The company list in `interview_coach.COMPANIES` must match the file names. LaTeX reference templates are in `backend/templates/`.
+
+**API (`app/api/`, `app/services/runner.py`)**: everything is nested under `/api/v1/sessions/{session_id}/...`; knowing the session UUID is the only access control. Long agent work is an `AgentRun` row (`app/db/models.py`) executed by `RunExecutor` in a thread pool: POST returns 202 with the run, progress events are appended to the run row, and `GET .../runs/{id}/events` streams them over SSE (polling the row; `Last-Event-ID` resumes). One unfinished run per kind per session (409). Handlers per kind live in `app/services/run_handlers.py`; raise `UserFacingError` for messages safe to show, anything else becomes a generic failure. Interviews are `AgentRun` rows whose id is the LangGraph thread id and are answered synchronously. On startup, unfinished non-interview runs are marked failed; sessions unseen for `SESSION_TTL_DAYS` are deleted at startup and every 6 hours (with their interview checkpoints).

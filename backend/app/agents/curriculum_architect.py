@@ -34,6 +34,7 @@ from langgraph.graph.state import CompiledStateGraph
 from pydantic import BaseModel, Field
 
 from app.core.config import get_settings
+from app.core.graphs import StepCallback, run_graph
 from app.core.resources import get_chroma, get_llm, get_web_search
 
 logger = logging.getLogger(__name__)
@@ -658,14 +659,15 @@ def get_curriculum_graph() -> CompiledStateGraph:
     return graph.compile()
 
 
-def build_learning_path(skill_gap_analysis: str, resume_inventory: str) -> CurriculumGraphState:
+def build_learning_path(
+    skill_gap_analysis: str, resume_inventory: str, on_step: StepCallback | None = None
+) -> CurriculumGraphState:
     """Run the full graph; the result's `draft_path` holds the learning path."""
-    return get_curriculum_graph().invoke(
-        {
-            "skill_gap_analysis": skill_gap_analysis,
-            "resume_inventory": resume_inventory,
-        },
+    return run_graph(
+        get_curriculum_graph(),
+        {"skill_gap_analysis": skill_gap_analysis, "resume_inventory": resume_inventory},
         config={"recursion_limit": RECURSION_LIMIT},
+        on_step=on_step,
     )
 
 
@@ -677,10 +679,19 @@ SOFT_SKILLS = {
 }  # fmt: skip
 
 
+def learning_path_inputs(
+    skill_gaps: list[str], user_skills: list[str], target_role: str
+) -> tuple[str, str]:
+    """(skill gap text, resume inventory) for the graph; soft skills skipped when possible."""
+    technical = [gap for gap in skill_gaps if gap.lower() not in SOFT_SKILLS] or skill_gaps
+    inventory = json.dumps({"skills": user_skills, "target_role": target_role}, indent=2)
+    return "\n".join(technical), inventory
+
+
 def plan_learning_path(
     skill_gaps: list[str], user_skills: list[str], target_role: str
 ) -> PersonalizedLearningPath | None:
     """Learning path for the technical gaps (soft skills are skipped when possible)."""
-    technical = [gap for gap in skill_gaps if gap.lower() not in SOFT_SKILLS] or skill_gaps
-    inventory = json.dumps({"skills": user_skills, "target_role": target_role}, indent=2)
-    return build_learning_path("\n".join(technical), inventory).get("draft_path")
+    return build_learning_path(*learning_path_inputs(skill_gaps, user_skills, target_role)).get(
+        "draft_path"
+    )
