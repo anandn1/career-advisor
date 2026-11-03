@@ -4,7 +4,7 @@
 
 The **Agentic AI Career Advisor** is an intelligent system designed to provide end-to-end career support. Powered by **Groq** for high-speed inference and **LangGraph** for stateful multi-agent orchestration, the application deploys a team of specialized AI agents to analyze job markets, craft resumes, and prepare candidates for interviews.
 
-> **Current Status:** The agents run from a terminal front-end. A web interface (FastAPI + Next.js) and Docker deployment are in development.
+> **Current Status:** The web app (FastAPI + Next.js) is working; Docker deployment is in development.
 
 ## System Architecture
 
@@ -73,23 +73,51 @@ uv run python -m app.agents.ingestion.seed_interview_db  # interview question st
 
 ## Usage
 
-Start the terminal front-end from `backend/`:
+### Web app
+
+Start the API from `backend/`:
 
 ```bash
-uv run python -m app.cli
+uv run uvicorn app.main:create_app --factory --reload   # http://localhost:8000 (docs at /docs)
 ```
 
-It asks for your target role, location and a resume file or GitHub username, then accepts commands: `jobs`, `learn`, `resume`, `interview`, `skills`, `report` and `exit`. Generated resumes and reports are saved in `backend/data/outputs/`.
+Then start the frontend from `frontend/` (Node 22 and pnpm):
+
+```bash
+cp .env.example .env.local     # NEXT_PUBLIC_API_URL=http://localhost:8000
+pnpm install
+pnpm dev                       # http://localhost:3000
+```
+
+Open http://localhost:3000, enter a target role and location, and add your background from a resume or GitHub. The route bar at the top takes you through the stations: Skills, Market, Learning path, Resume and Interview, ending at the Report. While an agent runs, its steps light up live on a line of stops.
+
+Run only one API process: at startup it marks interrupted runs as failed.
+
+### Terminal
+
+```bash
+cd backend && uv run python -m app.cli
+```
+
+### Tests
+
+```bash
+cd backend && uv run pytest     # backend, offline
+cd frontend && pnpm test        # frontend (Vitest)
+```
 
 ## Project Structure
 
 ```text
+frontend/            # Next.js + TypeScript + Tailwind web app (shadcn/ui, TanStack Query)
 backend/
 ├── app/
 │   ├── agents/      # LangGraph agents: skills, job market, curriculum, resume, interview
 │   ├── core/        # settings, shared LLM/embeddings/vector stores, checkpointer
 │   ├── services/    # job scraper, GitHub client, document reading, LaTeX compile
+│   ├── api/         # FastAPI routers and schemas
 │   ├── db/          # SQLAlchemy models, queries, template seeding
+│   ├── main.py      # FastAPI app factory
 │   └── cli.py       # terminal front-end
 ├── migrations/      # Alembic migrations
 ├── templates/       # reference LaTeX resume templates
@@ -101,7 +129,7 @@ docs/                # SRS and architecture diagram
 
   - [x] Core Agentic Workflow (CLI) with LangGraph
   - [x] Integration of Local Embeddings (Gemma 300M)
-  - [ ] Web interface: FastAPI backend + Next.js frontend
+  - [x] Web interface: FastAPI backend + Next.js frontend
   - [ ] Database integration for persistent user history.
   - [ ] Enhanced error handling and retry mechanisms.
 
