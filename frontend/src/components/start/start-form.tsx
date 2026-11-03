@@ -38,6 +38,15 @@ async function createSession(role: string, location: string) {
   return unwrap(await api.POST("/api/v1/sessions", { body: { target_role: role, location } }));
 }
 
+async function updateSession(sessionId: string, role: string, location: string) {
+  unwrap(
+    await api.PATCH("/api/v1/sessions/{session_id}", {
+      params: { path: { session_id: sessionId } },
+      body: { target_role: role, location },
+    }),
+  );
+}
+
 async function importBackground(sessionId: string, background: Background, file: File | null, github: string) {
   if (background === "resume" && file) {
     await uploadResume(sessionId, file, "skills");
@@ -64,8 +73,9 @@ export function StartForm() {
   // localStorage only exists in the browser; the server snapshot is "no previous route".
   const previous = useSyncExternalStore(noSubscription, rememberedSession, () => null);
 
-  // Once created, a retry reuses this session instead of creating (and orphaning) another.
-  const [createdId, setCreatedId] = useState<string | null>(null);
+  // Once created, a retry reuses this session (updated if the role or place changed)
+  // instead of creating, and orphaning, another.
+  const [created, setCreated] = useState<{ id: string; role: string; location: string } | null>(null);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -76,8 +86,14 @@ export function StartForm() {
     setError(null);
     setSubmitting(true);
     try {
-      const sessionId = createdId ?? (await createSession(role, location)).id;
-      setCreatedId(sessionId);
+      let sessionId: string;
+      if (!created) {
+        sessionId = (await createSession(role, location)).id;
+      } else {
+        sessionId = created.id;
+        if (created.role !== role || created.location !== location) await updateSession(sessionId, role, location);
+      }
+      setCreated({ id: sessionId, role, location });
       rememberSession(sessionId);
       await importBackground(sessionId, background, file, github);
       router.push(`/s/${sessionId}/skills`);

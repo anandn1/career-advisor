@@ -137,8 +137,9 @@ export function useRunStream(sessionId: string, run: Run | undefined) {
       );
     source.addEventListener("progress", (message) => {
       const { data, lastEventId } = message as MessageEvent;
-      // The stream replays from the start on (re)connect; the id is the event's position.
-      const index = Number(lastEventId);
+      // The id is the event's position. The first connection sends every event; a reconnect
+      // resumes after Last-Event-ID. An event without an id is appended.
+      const index = lastEventId === "" ? Number.NaN : Number(lastEventId);
       patch((current) => ({
         ...current,
         status: "running",

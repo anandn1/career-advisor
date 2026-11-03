@@ -19,8 +19,10 @@ export function RunPanel({
   runId: string | undefined;
   children?: (run: Run) => ReactNode;
 }) {
-  const { data: run } = useRun(sessionId, runId);
-  if (!run) return null;
+  const { data: run, error } = useRun(sessionId, runId);
+  if (!run) {
+    return error ? <p role="alert" className="text-danger">Couldn&apos;t load this run: {error.message}</p> : null;
+  }
   const travelling = !isFinished(run);
   return (
     <section aria-live="polite" className="flex flex-col gap-4">

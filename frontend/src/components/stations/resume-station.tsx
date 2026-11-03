@@ -34,14 +34,16 @@ export function skillsToText(skills: ResumeDraft["skills"] = []): string {
 }
 
 export function textToSkills(text: string): NonNullable<ResumeDraft["skills"]> {
-  return linesOf(text).map((line) => {
-    const [name, ...rest] = line.split(":");
-    const list = rest.length ? rest.join(":") : name;
-    return {
-      category_name: rest.length ? name.trim() : "Skills",
-      skills: list.split(",").map((skill) => skill.trim()).filter(Boolean),
-    };
-  });
+  return linesOf(text)
+    .map((line) => {
+      const [name, ...rest] = line.split(":");
+      const list = rest.length ? rest.join(":") : name;
+      return {
+        category_name: (rest.length && name.trim()) || "Skills",
+        skills: list.split(",").map((skill) => skill.trim()).filter(Boolean),
+      };
+    })
+    .filter((category) => category.skills.length > 0);
 }
 
 function Field({ label, children }: { label: string; children: (id: string) => React.ReactNode }) {

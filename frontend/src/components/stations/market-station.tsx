@@ -15,7 +15,7 @@ const MARKET = station("market");
 export function rankGaps(result: JobMarketResult): { skill: string; postings: number }[] {
   const counts = new Map<string, number>();
   for (const job of result.analysis.gaps_per_job ?? []) {
-    for (const gap of job.gaps) counts.set(gap, (counts.get(gap) ?? 0) + 1);
+    for (const gap of new Set(job.gaps)) counts.set(gap, (counts.get(gap) ?? 0) + 1);
   }
   for (const gap of result.analysis.skill_gaps ?? []) if (!counts.has(gap)) counts.set(gap, 0);
   return [...counts.entries()]
