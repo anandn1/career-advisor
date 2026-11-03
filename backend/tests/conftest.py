@@ -5,10 +5,12 @@ No test reads the real .env, touches backend/data, opens Postgres or calls an LL
 
 import pytest
 from langchain_core.runnables import RunnableLambda
+from sqlalchemy import create_engine, event
 
 from app.agents import curriculum_architect, interview_coach, job_market_analyst
 from app.core import checkpointer, config, resources
 from app.db import session as db_session
+from app.db.models import Base
 
 CACHED_FACTORIES = (
     config.get_settings,
@@ -79,6 +81,20 @@ class FakeLLM:
 
     def with_structured_output(self, schema):
         return RunnableLambda(lambda _: self.structured)
+
+
+@pytest.fixture
+def sqlite_engine(tmp_path, monkeypatch):
+    """App tables in a temporary SQLite file, used by session_scope() and the API."""
+    engine = create_engine(f"sqlite:///{tmp_path / 'app.db'}")
+    # Enforce foreign keys (and ON DELETE CASCADE) like Postgres does in production.
+    event.listen(
+        engine, "connect", lambda connection, _: connection.execute("PRAGMA foreign_keys=ON")
+    )
+    Base.metadata.create_all(engine)
+    monkeypatch.setattr(db_session, "get_engine", lambda: engine)
+    db_session._session_factory.cache_clear()
+    return engine
 
 
 @pytest.fixture

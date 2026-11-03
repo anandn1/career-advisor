@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     github_access_token: SecretStr | None = None
 
     data_dir: Path = BACKEND_DIR / "data"
+    session_ttl_days: int = Field(30, gt=0)
+    max_upload_bytes: int = Field(5 * 1024 * 1024, gt=0)
+    run_workers: int = Field(4, gt=0)
     cors_origins: Annotated[list[str], NoDecode] = ["http://localhost:3000"]
 
     @field_validator("database_url")
