@@ -23,7 +23,10 @@ class Settings(BaseSettings):
     llm_model: str = "llama-3.3-70b-versatile"
     resume_llm_model: str = "openai/gpt-oss-120b"
 
-    database_url: str = Field(validation_alias=AliasChoices("DATABASE_URL", "DB_URL"))
+    database_url: str = Field(
+        validation_alias=AliasChoices("DATABASE_URL", "DB_URL"),
+        repr=False,  # holds the database password
+    )
 
     embedding_model: str = "google/embeddinggemma-300m"
     hf_token: SecretStr | None = None

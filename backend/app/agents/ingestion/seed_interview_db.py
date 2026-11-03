@@ -1,5 +1,6 @@
 import re
 import shutil
+import tempfile
 from collections.abc import Generator
 from pathlib import Path
 
@@ -10,6 +11,7 @@ from langchain_core.documents import Document
 from app.core.config import get_settings
 from app.core.resources import get_embeddings
 
+CHROMA_DB_FILE = "chroma.sqlite3"
 DATA_SOURCE_DIR = Path(__file__).resolve().parent / "interview_rag_data"
 # A line holding only '---' separates questions (trailing spaces allowed).
 QUESTION_DELIMITER = re.compile(r"^[ \t]*---[ \t]*$", re.MULTILINE)
@@ -181,7 +183,7 @@ def load_documents_from_files(data_dir: Path = DATA_SOURCE_DIR) -> list[Document
 
 def store_has_questions(chroma_dir: Path) -> bool:
     """True if the store exists and holds at least one document."""
-    if not chroma_dir.exists():
+    if not (chroma_dir / CHROMA_DB_FILE).exists():
         return False
     client = chromadb.PersistentClient(path=str(chroma_dir))
     return any(collection.count() for collection in client.list_collections())
@@ -205,13 +207,23 @@ def seed_database(dry_run: bool = False, data_dir: Path = DATA_SOURCE_DIR) -> No
             print(f"  ... and {len(documents_to_add) - 5} more")
         return
 
+    print(" Building the new vector store...")
+    chroma_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging_dir = Path(tempfile.mkdtemp(prefix=".seeding-", dir=chroma_dir.parent))
+    try:
+        Chroma.from_documents(
+            documents=documents_to_add,
+            embedding=get_embeddings(),
+            persist_directory=str(staging_dir),
+        )
+    except BaseException:
+        shutil.rmtree(staging_dir, ignore_errors=True)
+        raise
+    # Only now, with the new store complete, replace the old one.
     if chroma_dir.exists():
-        print(f" Clearing existing database at {chroma_dir}...")
         shutil.rmtree(chroma_dir)
-    print(" Creating new vector store and adding documents...")
-    db = Chroma.from_documents(
-        documents=documents_to_add, embedding=get_embeddings(), persist_directory=str(chroma_dir)
-    )
+    staging_dir.rename(chroma_dir)
+    db = Chroma(persist_directory=str(chroma_dir), embedding_function=get_embeddings())
 
     print(f"\n🎉 Successfully seeded {len(documents_to_add)} documents!")
     print(f" Database saved to {chroma_dir}")

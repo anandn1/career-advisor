@@ -11,7 +11,7 @@ from pathlib import Path
 
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.core.resources import get_resume_llm
 from app.services import github
@@ -84,6 +84,14 @@ class ResumeProfile(BaseModel):
     education: list[Education] = Field(default_factory=list)
     work_experience: list[WorkExperience] = Field(default_factory=list)
     skills: list[str] = Field(default_factory=list)
+
+    @field_validator("github_username")
+    @classmethod
+    def _normalize_github_username(cls, value: str | None) -> str | None:
+        """Accept a username or a github.com profile URL; empty means none."""
+        if value is None or not value.strip():
+            return None
+        return github.parse_username(value)
 
 
 class ResumeDraft(BaseModel):

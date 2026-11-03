@@ -4,6 +4,7 @@ Pipeline: search the cached postings in Chroma, scrape fresh postings from
 LinkedIn (and cache them), then compare required skills with the user's.
 """
 
+import json
 import logging
 import re
 from datetime import date
@@ -75,6 +76,7 @@ def _posting_to_document(posting: dict[str, Any]) -> Document:
         "seniority": posting.get("seniority level", "N/A"),
         "title": posting.get("title", "N/A"),
         "scraped_at": date.today().isoformat(),
+        "skills": json.dumps(posting.get("skills required", [])),
     }
     return Document(page_content=content, metadata=metadata)
 
@@ -96,6 +98,14 @@ def _skills_from_content(content: str) -> list[str]:
     return [skill for skill in skills if skill]
 
 
+def _cached_skills(document: Document) -> list[str]:
+    """Skills from metadata (JSON, keeps commas inside skills), else from older content."""
+    stored = document.metadata.get("skills")
+    if stored:
+        return [skill.lower() for skill in json.loads(stored)]
+    return _skills_from_content(document.page_content.lower())
+
+
 def _title_from(document: Document) -> str:
     title = document.metadata.get("title") or "N/A"
     if title.lower() != "n/a":
@@ -109,7 +119,7 @@ def _document_to_job(document: Document) -> dict:
         "title": _title_from(document),
         "company": document.metadata.get("company", "N/A"),
         "location": document.metadata.get("location", "N/A"),
-        "skills_required": _skills_from_content(document.page_content.lower()),
+        "skills_required": _cached_skills(document),
         "source": "cached",
         "scraped_at": document.metadata.get("scraped_at"),
     }
@@ -119,7 +129,11 @@ def _dedupe_jobs(jobs: list[dict]) -> list[dict]:
     seen = set()
     unique = []
     for job in jobs:
-        key = (job["company"], tuple(sorted(s.lower() for s in job["skills_required"])))
+        key = (
+            str(job.get("title", "")).lower(),
+            job["company"],
+            tuple(sorted(s.lower() for s in job["skills_required"])),
+        )
         if key not in seen:
             seen.add(key)
             unique.append(job)

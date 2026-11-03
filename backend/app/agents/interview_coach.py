@@ -42,6 +42,7 @@ STOP_WORDS = {"stop", "done", "end", "finish", "quit"}
 GOOD_GRADES = {"excellent", "good"}
 GRADES = ("excellent", "good", "moderate", "bad")
 DEFAULT_GRADE = "moderate"
+EVALUATION_ERROR = "error"
 MAX_FOLLOW_UPS_PER_QUESTION = 2
 NO_QUESTION_IDS = {"NONE", "ERROR", "DONE"}
 DEFAULT_TOPICS = ["Data Structures & Algorithms", "System Design"]
@@ -341,7 +342,7 @@ def _grade_answer(question: str, answer: str) -> tuple[str, str, str]:
         )
     except Exception as error:  # provider errors: record and carry on
         logger.warning("Answer evaluation failed: %s", error)
-        return "error", "unknown", str(error)
+        return EVALUATION_ERROR, "unknown", str(error)
     return (
         _parse_grade(text),
         _parse_field("SKILL", text, "general").lower(),
@@ -421,7 +422,7 @@ def decide_action_router(
         return "update_coverage"
     last = state["evaluation_report"][-1]
     out_of_follow_ups = state.get("follow_up_count", 0) >= MAX_FOLLOW_UPS_PER_QUESTION
-    if last["evaluation"] in GOOD_GRADES or out_of_follow_ups:
+    if last["evaluation"] in GOOD_GRADES | {EVALUATION_ERROR} or out_of_follow_ups:
         return "update_coverage"
     try:
         prompt = ACTION_CHOICE_PROMPT.format(

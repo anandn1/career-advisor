@@ -49,6 +49,7 @@ MAX_SCORE = 10
 MAX_DIFFICULTY_BY_LEVEL = {"Beginner": 2, "Intermediate": 4, "Advanced": 5}
 DEFAULT_MAX_DIFFICULTY = 4
 RECURSION_LIMIT = 300
+KEYWORD_STOP_WORDS = {"and", "or", "of", "the", "for", "with", "in", "to", "a", "an"}
 # Each skill takes about 7 graph steps, so this keeps runs well under RECURSION_LIMIT.
 MAX_SKILLS = 15
 
@@ -110,15 +111,24 @@ def _course_to_document(course: Course) -> Document:
         f"Description: {course.description}"
     )
     metadata = course.model_dump()
-    metadata["prereqs"] = ",".join(map(str, course.prereqs))
-    metadata["topics"] = ",".join(course.topics)
+    # Chroma metadata holds only scalars, so lists are stored as JSON strings.
+    metadata["prereqs"] = json.dumps(course.prereqs)
+    metadata["topics"] = json.dumps(course.topics)
     return Document(page_content=content, metadata=metadata)
+
+
+def _stored_list(value) -> list:
+    """A list saved by _course_to_document (JSON), or by older versions (comma-separated)."""
+    text = str(value or "")
+    if text.startswith("["):
+        return json.loads(text)
+    return [item.strip() for item in text.split(",") if item.strip()]
 
 
 def _document_to_course(document: Document) -> Course:
     metadata = dict(document.metadata)
-    metadata["prereqs"] = [int(p) for p in str(metadata.get("prereqs", "")).split(",") if p]
-    metadata["topics"] = [t.strip() for t in str(metadata.get("topics", "")).split(",") if t]
+    metadata["prereqs"] = [int(p) for p in _stored_list(metadata.get("prereqs"))]
+    metadata["topics"] = _stored_list(metadata.get("topics"))
     return Course(**metadata)
 
 
@@ -274,6 +284,14 @@ def entry_node(state: CurriculumGraphState) -> dict:
     }
 
 
+def _unique_ignoring_case(items: list[str]) -> list[str]:
+    """First spelling of each item, in first-seen order, ignoring case."""
+    unique: dict[str, str] = {}
+    for item in items:
+        unique.setdefault(item.lower(), item)
+    return list(unique.values())
+
+
 def planner_node(state: CurriculumGraphState) -> dict:
     chain = PLANNER_PROMPT | get_llm().with_structured_output(PlannerOutput)
     output = chain.invoke(
@@ -282,7 +300,7 @@ def planner_node(state: CurriculumGraphState) -> dict:
     logger.info("Planner found %d skills to cover", len(output.skills_to_find))
     return {
         "user_profile": output.user_profile,
-        "skills_to_find": list(dict.fromkeys(output.skills_to_find))[:MAX_SKILLS],
+        "skills_to_find": _unique_ignoring_case(output.skills_to_find)[:MAX_SKILLS],
     }
 
 
@@ -305,13 +323,15 @@ def _mentions_word(text: str, keyword: str) -> bool:
     return re.search(rf"(?<![a-z0-9]){re.escape(keyword)}(?![a-z0-9])", text) is not None
 
 
-def _course_mentions_any(course: Course, keywords: list[str]) -> bool:
-    haystacks = [
-        course.title.lower(),
-        course.description.lower(),
-        *(t.lower() for t in course.topics),
-    ]
-    return any(_mentions_word(text, keyword) for keyword in keywords for text in haystacks)
+def _skill_keywords(skill: str) -> list[str]:
+    words = skill.lower().split()
+    return [word for word in words if word not in KEYWORD_STOP_WORDS] or words
+
+
+def _course_mentions_all(course: Course, keywords: list[str]) -> bool:
+    """Every keyword appears as a whole word somewhere in the course's text."""
+    text = " | ".join([course.title, course.description, *course.topics]).lower()
+    return all(_mentions_word(text, keyword) for keyword in keywords)
 
 
 def fetch_course_catalog(state: CurriculumGraphState) -> dict:
@@ -319,8 +339,8 @@ def fetch_course_catalog(state: CurriculumGraphState) -> dict:
     skill = state["current_skill"]
     documents = get_course_catalog().similarity_search(skill, k=CATALOG_CANDIDATES)
     courses = [_document_to_course(doc) for doc in documents]
-    keywords = skill.lower().split()
-    return {"course_catalog": [c for c in courses if _course_mentions_any(c, keywords)]}
+    keywords = _skill_keywords(skill)
+    return {"course_catalog": [c for c in courses if _course_mentions_all(c, keywords)]}
 
 
 def web_search_for_courses(state: CurriculumGraphState) -> dict:
