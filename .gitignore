@@ -20,3 +20,6 @@ report_session_*.txt
 # Internal planning docs
 architect-plan.md
 backend/data/
+
+# Claude Code project instructions (kept local)
+CLAUDE.md
