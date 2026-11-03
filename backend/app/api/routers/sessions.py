@@ -29,7 +29,7 @@ def read_session(career_session: CurrentSession):
 def update_session(body: SessionUpdate, career_session: CurrentSession):
     changes = body.model_dump(exclude_none=True)
     if "skills" in changes:
-        changes["skills"] = list(dict.fromkeys(skill for skill in changes["skills"] if skill))
+        changes["skills"] = career_sessions.unique_ignoring_case(changes["skills"])
     for name, value in changes.items():
         setattr(career_session, name, value)
     return career_session
@@ -78,5 +78,5 @@ def _latest_resume(db, session_id: str) -> dict | None:
     ]
     if not candidates:
         return None
-    newest = max(candidates, key=lambda run: run.finished_at)
+    newest = max(candidates, key=lambda run: run.finished_at or run.created_at)
     return {"run_id": newest.id, **(newest.result or {})}

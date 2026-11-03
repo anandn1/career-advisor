@@ -82,6 +82,8 @@ def _owned_interview(db, career_session: CareerSession, interview_id: str) -> Ag
 @router.post("/{interview_id}/answers", response_model=InterviewOut)
 def answer(interview_id: str, body: AnswerRequest, career_session: CurrentSession, db: Db):
     run = _owned_interview(db, career_session, interview_id)
+    if run.status != RunStatus.RUNNING:
+        raise HTTPException(status.HTTP_409_CONFLICT, f"This interview has {run.status}")
     try:
         turn = interview_coach.submit_answer(run.id, body.answer)
     except interview_coach.InterviewStateError as error:

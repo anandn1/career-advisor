@@ -11,6 +11,15 @@ from app.db.models import AgentRun, CareerSession, RunKind, RunStatus, utcnow
 UNFINISHED = (RunStatus.QUEUED, RunStatus.RUNNING)
 
 
+def unique_ignoring_case(items: list[str]) -> list[str]:
+    """Non-blank items, first spelling of each kept, in first-seen order, ignoring case."""
+    unique: dict[str, str] = {}
+    for item in items:
+        if item:
+            unique.setdefault(item.lower(), item)
+    return list(unique.values())
+
+
 def create_session(db: Session, target_role: str, location: str) -> CareerSession:
     career_session = CareerSession(target_role=target_role, location=location, skills=[])
     db.add(career_session)

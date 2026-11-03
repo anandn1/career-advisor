@@ -33,6 +33,7 @@ from app.api.schemas import (
 )
 from app.core.config import get_settings
 from app.db import career_sessions
+from app.db.career_sessions import unique_ignoring_case
 from app.db.models import AgentRun, CareerSession, RunKind, RunStatus, utcnow
 from app.db.session import session_scope
 from app.db.templates import get_template
@@ -44,6 +45,7 @@ logger = logging.getLogger(__name__)
 NOT_SCHEDULED = "The server could not start this run right now. Please try again."
 EVENT_POLL_SECONDS = 0.5
 MAX_STREAM_SECONDS = 10 * 60
+MAX_EVENT_ID_DIGITS = 10
 RESUME_KINDS = (RunKind.RESUME, RunKind.RESUME_RENDER)
 
 
@@ -146,7 +148,7 @@ def generate_resume(body: ResumeRequest, career_session: CurrentSession, db: Db,
         github_username=career_session.github_username if body.include_github else None,
         education=body.education,
         work_experience=body.work_experience,
-        skills=list(dict.fromkeys(s for s in [*career_session.skills, *body.extra_skills] if s)),
+        skills=unique_ignoring_case([*career_session.skills, *body.extra_skills]),
     )
     run_input = {"profile": profile.model_dump(), "template_id": body.template_id}
     return _start_run(db, runner, career_session, RunKind.RESUME, run_input)
@@ -205,7 +207,12 @@ def _run_snapshot(session_id: str, run_id: str) -> dict | None:
 
 def _resume_index(last_event_id: str | None) -> int:
     """Index of the first event to send after a reconnect (Last-Event-ID + 1)."""
-    if last_event_id and last_event_id.isascii() and last_event_id.isdigit():
+    if (
+        last_event_id
+        and len(last_event_id) <= MAX_EVENT_ID_DIGITS
+        and last_event_id.isascii()
+        and last_event_id.isdigit()
+    ):
         return int(last_event_id) + 1
     return 0
 

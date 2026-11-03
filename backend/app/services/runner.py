@@ -95,8 +95,9 @@ class RunExecutor:
         """Run one queued run to completion; never raises."""
         try:
             context, handler = self._start(run_id)
-        except Exception:  # a broken row must not kill the worker thread
+        except Exception as error:  # a broken row must not kill the worker thread
             logger.exception("Could not start run %s", run_id)
+            self._finish_safely(run_id, RunStatus.FAILED, error=_error_message(error))
             return
         try:
             result = handler(context)
