@@ -10,11 +10,13 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Index,
     LargeBinary,
     String,
     Table,
     Text,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -118,10 +120,25 @@ class CareerSession(Base):
     )
 
 
+# Statuses are stored by name; interviews may legitimately run side by side.
+UNFINISHED_BACKGROUND_RUN = text("status IN ('QUEUED', 'RUNNING') AND kind != 'INTERVIEW'")
+
+
 class AgentRun(Base):
     """One run of an agent for a session; interviews use the LangGraph thread id as id."""
 
     __tablename__ = "agent_runs"
+    __table_args__ = (
+        # At most one unfinished background run per kind per session, even under races.
+        Index(
+            "uq_agent_runs_one_unfinished_per_kind",
+            "session_id",
+            "kind",
+            unique=True,
+            postgresql_where=UNFINISHED_BACKGROUND_RUN,
+            sqlite_where=UNFINISHED_BACKGROUND_RUN,
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
     session_id: Mapped[str] = mapped_column(

@@ -1,29 +1,30 @@
 """Request and response bodies of the HTTP API."""
 
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from app.agents.interview_coach import COMPANIES
 from app.agents.resume_strategist import ContactInfo, Education, ResumeDraft, WorkExperience
 from app.db.models import RunKind, RunStatus
 
-ShortText = Field(min_length=1, max_length=200)
+ShortText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+SkillName = Annotated[str, StringConstraints(strip_whitespace=True, max_length=100)]
 CompanyFocus = Literal[(*COMPANIES, "all")]  # type: ignore[valid-type]
 MAX_ANSWER_LENGTH = 5000
 MAX_REQUEST_LENGTH = 1000
 
 
 class SessionCreate(BaseModel):
-    target_role: str = ShortText
-    location: str = ShortText
+    target_role: ShortText
+    location: ShortText
 
 
 class SessionUpdate(BaseModel):
-    target_role: str | None = Field(None, min_length=1, max_length=200)
-    location: str | None = Field(None, min_length=1, max_length=200)
-    skills: list[str] | None = Field(None, max_length=200)
+    target_role: ShortText | None = None
+    location: ShortText | None = None
+    skills: list[SkillName] | None = Field(None, max_length=200)
 
 
 class SessionOut(BaseModel):

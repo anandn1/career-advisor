@@ -1,5 +1,6 @@
 """Mock interviews: start, answer turn by turn (resumed from the checkpoint), read the report."""
 
+import logging
 import uuid
 
 from fastapi import APIRouter, HTTPException, status
@@ -9,6 +10,9 @@ from app.api.deps import CurrentSession, Db
 from app.api.schemas import AnswerRequest, InterviewCreate, InterviewOut, TurnOut
 from app.db import career_sessions
 from app.db.models import AgentRun, CareerSession, RunKind, RunStatus, utcnow
+
+logger = logging.getLogger(__name__)
+UNAVAILABLE = "The interview service is temporarily unavailable. Please try again."
 
 router = APIRouter(prefix="/sessions/{session_id}/interviews", tags=["interviews"])
 
@@ -50,7 +54,14 @@ def start_interview(body: InterviewCreate, career_session: CurrentSession, db: D
         status=RunStatus.RUNNING,
         started_at=utcnow(),
     )
-    turn = interview_coach.start_interview(run.id, topics, body.company_focus)
+    db.commit()  # keep the run row even if the first question cannot be produced
+    try:
+        turn = interview_coach.start_interview(run.id, topics, body.company_focus)
+    except Exception as error:  # LLM / vector store / checkpointer failures
+        logger.exception("Could not start interview %s", run.id)
+        run.status, run.finished_at, run.error = RunStatus.FAILED, utcnow(), UNAVAILABLE
+        db.commit()  # raising rolls back the request transaction; keep the failure recorded
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, UNAVAILABLE) from error
     _record_turn(run, turn)
     return _out(run, turn)
 
@@ -69,6 +80,9 @@ def answer(interview_id: str, body: AnswerRequest, career_session: CurrentSessio
         turn = interview_coach.submit_answer(run.id, body.answer)
     except interview_coach.InterviewStateError as error:
         raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
+    except Exception as error:  # LLM / vector store / checkpointer failures; retryable
+        logger.exception("Could not process an answer for interview %s", run.id)
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, UNAVAILABLE) from error
     _record_turn(run, turn)
     return _out(run, turn)
 

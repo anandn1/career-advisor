@@ -12,7 +12,7 @@ router = APIRouter(prefix="/sessions", tags=["sessions"])
 
 @router.post("", status_code=status.HTTP_201_CREATED, response_model=SessionOut)
 def create_session(body: SessionCreate, db: Db):
-    return career_sessions.create_session(db, body.target_role.strip(), body.location.strip())
+    return career_sessions.create_session(db, body.target_role, body.location)
 
 
 @router.get("/{session_id}", response_model=SessionOut)
@@ -24,9 +24,9 @@ def read_session(career_session: CurrentSession):
 def update_session(body: SessionUpdate, career_session: CurrentSession):
     changes = body.model_dump(exclude_none=True)
     if "skills" in changes:
-        changes["skills"] = list(dict.fromkeys(s.strip() for s in changes["skills"] if s.strip()))
+        changes["skills"] = list(dict.fromkeys(skill for skill in changes["skills"] if skill))
     for name, value in changes.items():
-        setattr(career_session, name, value.strip() if isinstance(value, str) else value)
+        setattr(career_session, name, value)
     return career_session
 
 

@@ -17,6 +17,7 @@ from fastapi import (
     status,
 )
 from fastapi.sse import EventSourceResponse, ServerSentEvent
+from sqlalchemy.exc import IntegrityError
 
 from app.agents.resume_strategist import ResumeProfile
 from app.api.deps import CurrentSession, Db, Runner
@@ -42,10 +43,15 @@ RESUME_KINDS = (RunKind.RESUME, RunKind.RESUME_RENDER)
 
 def _start_run(db, runner, career_session: CareerSession, kind: RunKind, run_input: dict):
     """Queue a run; at most one unfinished run of each kind per session."""
+    conflict = HTTPException(status.HTTP_409_CONFLICT, f"A {kind} run is already in progress")
     if career_sessions.unfinished_run(db, career_session.id, kind):
-        raise HTTPException(status.HTTP_409_CONFLICT, f"A {kind} run is already in progress")
-    run = career_sessions.create_run(db, career_session, kind, run_input)
-    db.commit()  # the worker thread reads the row from its own transaction
+        raise conflict
+    try:
+        run = career_sessions.create_run(db, career_session, kind, run_input)
+        db.commit()  # the worker thread reads the row from its own transaction
+    except IntegrityError as error:  # a concurrent request won the race (unique index)
+        db.rollback()
+        raise conflict from error
     runner.submit(run.id)
     return run
 

@@ -1,6 +1,7 @@
 """FastAPI application: routes, CORS, background run workers and session expiry.
 
-Run from backend/:  uv run uvicorn app.main:app --reload
+Run from backend/:  uv run uvicorn app.main:create_app --factory --reload
+(A factory, so importing this module reads no settings and needs no credentials.)
 """
 
 import asyncio
@@ -39,12 +40,14 @@ def expire_old_sessions() -> int:
     """Delete sessions unused for SESSION_TTL_DAYS, with their interview checkpoints."""
     ttl = timedelta(days=get_settings().session_ttl_days)
     with session_scope() as db:
-        thread_ids = career_sessions.delete_expired_sessions(db, ttl)
+        expired = career_sessions.delete_expired_sessions(db, ttl)
     try:
-        _delete_checkpoints(thread_ids)
+        _delete_checkpoints(expired.interview_thread_ids)
     except Exception:  # checkpoints are best effort; the session rows are already gone
         logger.exception("Could not delete interview checkpoints")
-    return len(thread_ids)
+    if expired.session_ids:
+        logger.info("Deleted %d expired sessions", len(expired.session_ids))
+    return len(expired.session_ids)
 
 
 async def _expire_periodically() -> None:
@@ -89,6 +92,3 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     return app
-
-
-app = create_app()

@@ -1,5 +1,6 @@
 """Queries for anonymous career sessions and their agent runs."""
 
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from sqlalchemy import delete, select
@@ -76,8 +77,16 @@ def fail_unfinished_runs(db: Session, reason: str) -> int:
     return len(runs)
 
 
-def delete_expired_sessions(db: Session, ttl: timedelta, now: datetime | None = None) -> list[str]:
-    """Delete sessions unseen for `ttl`; returns their interview thread ids for cleanup."""
+@dataclass(frozen=True)
+class ExpiredSessions:
+    session_ids: list[str]
+    interview_thread_ids: list[str]
+
+
+def delete_expired_sessions(
+    db: Session, ttl: timedelta, now: datetime | None = None
+) -> ExpiredSessions:
+    """Delete sessions unseen for `ttl`; returns what was deleted (for checkpoint cleanup)."""
     cutoff = (now or utcnow()) - ttl
     expired = select(CareerSession.id).where(CareerSession.last_seen_at < cutoff)
     thread_ids = list(
@@ -91,4 +100,4 @@ def delete_expired_sessions(db: Session, ttl: timedelta, now: datetime | None = 
     if expired_ids:
         db.execute(delete(AgentRun).where(AgentRun.session_id.in_(expired_ids)))
         db.execute(delete(CareerSession).where(CareerSession.id.in_(expired_ids)))
-    return thread_ids
+    return ExpiredSessions(session_ids=expired_ids, interview_thread_ids=thread_ids)

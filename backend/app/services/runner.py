@@ -5,6 +5,7 @@ through RunContext.progress(); every event is committed right away so a browser
 streaming /runs/{id}/events sees it, and can reconnect without losing any.
 """
 
+import json
 import logging
 from collections.abc import Callable
 from concurrent.futures import Executor, ThreadPoolExecutor
@@ -16,6 +17,7 @@ from app.db.session import session_scope
 logger = logging.getLogger(__name__)
 
 MAX_ERROR_LENGTH = 500
+SAVE_FAILED_MESSAGE = "The run finished but its result could not be saved. Please try again."
 
 
 @dataclass(frozen=True)
@@ -38,6 +40,8 @@ class RunContext:
     def progress(self, step: str, detail: dict | None = None) -> None:
         with session_scope() as db:
             run = db.get(AgentRun, self.run_id)
+            if run is None:
+                raise RunGoneError("The session was deleted while this run was in progress.")
             event = {"step": step, "detail": detail or {}, "at": utcnow().isoformat()}
             run.events = [*run.events, event]
 
@@ -54,6 +58,10 @@ Handler = Callable[[RunContext], dict]
 
 class UserFacingError(Exception):
     """A failure whose message is safe and useful to show the user as-is."""
+
+
+class RunGoneError(UserFacingError):
+    """The run's row (or its whole session) was deleted while it was running."""
 
 
 def _snapshot(career_session: CareerSession) -> SessionSnapshot:
@@ -92,11 +100,12 @@ class RunExecutor:
             return
         try:
             result = handler(context)
+            json.dumps(result)  # fail here, not at commit, if the result cannot be stored
         except Exception as error:  # every agent failure becomes a failed run
             logger.exception("Run %s failed", run_id)
-            self._finish(run_id, RunStatus.FAILED, error=_error_message(error))
+            self._finish_safely(run_id, RunStatus.FAILED, error=_error_message(error))
         else:
-            self._finish(run_id, RunStatus.SUCCEEDED, result=result)
+            self._finish_safely(run_id, RunStatus.SUCCEEDED, result=result)
 
     def _start(self, run_id: str) -> tuple[RunContext, Handler]:
         with session_scope() as db:
@@ -108,9 +117,22 @@ class RunExecutor:
     def _finish(self, run_id: str, status: RunStatus, **fields) -> None:
         with session_scope() as db:
             run = db.get(AgentRun, run_id)
+            if run is None:  # deleted along with its session; nothing left to update
+                return
             run.status, run.finished_at = status, utcnow()
             for name, value in fields.items():
                 setattr(run, name, value)
+
+    def _finish_safely(self, run_id: str, status: RunStatus, **fields) -> None:
+        """Finish the run; if that fails, still mark it failed so its kind is not blocked."""
+        try:
+            self._finish(run_id, status, **fields)
+        except Exception:  # e.g. the database rejected the update
+            logger.exception("Could not save the outcome of run %s", run_id)
+            try:
+                self._finish(run_id, RunStatus.FAILED, error=SAVE_FAILED_MESSAGE)
+            except Exception:  # database unreachable: startup will mark it failed
+                logger.exception("Could not mark run %s failed", run_id)
 
     def shutdown(self) -> None:
         self.executor.shutdown(wait=False, cancel_futures=True)

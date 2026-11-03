@@ -30,7 +30,7 @@ uv run alembic upgrade head                             # create/upgrade DB tabl
 uv run python -m app.db.seed_templates                  # load templates/*.tex (LLM-tagged)
 uv run python -m app.agents.ingestion.seed_interview_db # build interview question store
 #   flags: --verify (parse only), --dry-run, --if-empty (skip if store exists)
-uv run uvicorn app.main:app --reload                    # API on :8000 (docs at /docs)
+uv run uvicorn app.main:create_app --factory --reload  # API on :8000 (docs at /docs)
 uv run python -m app.cli                                # interactive terminal front-end
 TEST_DATABASE_URL=postgresql://... uv run pytest -m postgres  # Postgres-only tests (drops that DB's schema)
 ```
