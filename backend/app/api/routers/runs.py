@@ -1,6 +1,7 @@
 """Starting agent runs, polling them, streaming their progress and downloading resume files."""
 
 import asyncio
+import logging
 import tempfile
 import time
 from pathlib import Path
@@ -32,13 +33,15 @@ from app.api.schemas import (
 )
 from app.core.config import get_settings
 from app.db import career_sessions
-from app.db.models import AgentRun, CareerSession, RunKind
+from app.db.models import AgentRun, CareerSession, RunKind, RunStatus, utcnow
 from app.db.session import session_scope
 from app.db.templates import get_template
 from app.services import documents, github
 
 router = APIRouter(prefix="/sessions/{session_id}/runs", tags=["runs"])
 
+logger = logging.getLogger(__name__)
+NOT_SCHEDULED = "The server could not start this run right now. Please try again."
 EVENT_POLL_SECONDS = 0.5
 MAX_STREAM_SECONDS = 10 * 60
 RESUME_KINDS = (RunKind.RESUME, RunKind.RESUME_RENDER)
@@ -55,7 +58,13 @@ def _start_run(db, runner, career_session: CareerSession, kind: RunKind, run_inp
     except IntegrityError as error:  # a concurrent request won the race (unique index)
         db.rollback()
         raise conflict from error
-    runner.submit(run.id)
+    try:
+        runner.submit(run.id)
+    except Exception as error:  # e.g. the pool is shutting down: don't leave a queued orphan
+        logger.exception("Could not schedule run %s", run.id)
+        run.status, run.finished_at, run.error = RunStatus.FAILED, utcnow(), NOT_SCHEDULED
+        db.commit()
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, NOT_SCHEDULED) from error
     return run
 
 
@@ -137,7 +146,7 @@ def generate_resume(body: ResumeRequest, career_session: CurrentSession, db: Db,
         github_username=career_session.github_username if body.include_github else None,
         education=body.education,
         work_experience=body.work_experience,
-        skills=list(dict.fromkeys([*career_session.skills, *body.extra_skills])),
+        skills=list(dict.fromkeys(s for s in [*career_session.skills, *body.extra_skills] if s)),
     )
     run_input = {"profile": profile.model_dump(), "template_id": body.template_id}
     return _start_run(db, runner, career_session, RunKind.RESUME, run_input)

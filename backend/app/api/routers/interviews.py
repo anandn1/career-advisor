@@ -35,10 +35,16 @@ def _out(run: AgentRun, turn: interview_coach.InterviewTurn | None = None) -> In
 
 
 def _record_turn(run: AgentRun, turn: interview_coach.InterviewTurn) -> None:
-    if turn.finished:
+    """Close the run when the interview has finished (the checkpoint is final by then)."""
+    if not turn.finished:
+        return
+    try:
         report = interview_coach.evaluation_report(run.id)
-        run.status, run.finished_at = RunStatus.SUCCEEDED, utcnow()
-        run.result = {"summary": turn.summary, "report": report}
+    except Exception:  # the summary is still worth keeping; never leave the run open
+        logger.exception("Could not read the report of interview %s", run.id)
+        report = []
+    run.status, run.finished_at = RunStatus.SUCCEEDED, utcnow()
+    run.result = {"summary": turn.summary, "report": report}
 
 
 @router.post("", status_code=status.HTTP_201_CREATED, response_model=InterviewOut)

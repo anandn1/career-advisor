@@ -16,6 +16,7 @@ from app.api.routers import interviews, runs, sessions, templates
 from app.core.config import get_settings
 from app.db import career_sessions
 from app.db.session import session_scope
+from app.services.checkpoints import delete_interview_checkpoints
 from app.services.run_handlers import HANDLERS
 from app.services.runner import RunExecutor
 
@@ -27,13 +28,7 @@ RESTART_REASON = "The server restarted while this run was in progress. Please ru
 
 
 def _delete_checkpoints(thread_ids: list[str]) -> None:
-    if not thread_ids:
-        return
-    from app.core.checkpointer import get_checkpointer
-
-    checkpointer = get_checkpointer()
-    for thread_id in thread_ids:
-        checkpointer.delete_thread(thread_id)
+    delete_interview_checkpoints(thread_ids)
 
 
 def expire_old_sessions() -> int:

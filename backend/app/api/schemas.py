@@ -60,7 +60,7 @@ class ResumeRequest(BaseModel):
     contact: ContactInfo = Field(default_factory=ContactInfo)
     education: list[Education] = Field(default_factory=list, max_length=20)
     work_experience: list[WorkExperience] = Field(default_factory=list, max_length=30)
-    extra_skills: list[str] = Field(default_factory=list, max_length=100)
+    extra_skills: list[SkillName] = Field(default_factory=list, max_length=100)
     include_github: bool = True
     template_id: str | None = None
 

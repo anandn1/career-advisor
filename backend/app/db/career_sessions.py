@@ -83,23 +83,40 @@ class ExpiredSessions:
     interview_thread_ids: list[str]
 
 
+EXPIRY_BATCH_SIZE = 500  # keeps each IN (...) list well under database parameter limits
+
+
+def interview_thread_ids(db: Session, session_ids: list[str]) -> list[str]:
+    query = select(AgentRun.id).where(
+        AgentRun.session_id.in_(session_ids), AgentRun.kind == RunKind.INTERVIEW
+    )
+    return list(db.scalars(query))
+
+
 def delete_expired_sessions(
     db: Session, ttl: timedelta, now: datetime | None = None
 ) -> ExpiredSessions:
-    """Delete sessions unseen for `ttl`; returns what was deleted (for checkpoint cleanup)."""
+    """Delete sessions unseen for `ttl`, in batches; returns what was deleted."""
     cutoff = (now or utcnow()) - ttl
+    deleted = ExpiredSessions(session_ids=[], interview_thread_ids=[])
+    while batch := _delete_expired_batch(db, cutoff):
+        deleted.session_ids.extend(batch.session_ids)
+        deleted.interview_thread_ids.extend(batch.interview_thread_ids)
+    return deleted
+
+
+def _delete_expired_batch(db: Session, cutoff: datetime) -> ExpiredSessions | None:
     # One list of ids for both steps, so checkpoints are only deleted for deleted sessions.
     expired_ids = list(
-        db.scalars(select(CareerSession.id).where(CareerSession.last_seen_at < cutoff))
-    )
-    thread_ids = list(
         db.scalars(
-            select(AgentRun.id).where(
-                AgentRun.session_id.in_(expired_ids), AgentRun.kind == RunKind.INTERVIEW
-            )
+            select(CareerSession.id)
+            .where(CareerSession.last_seen_at < cutoff)
+            .limit(EXPIRY_BATCH_SIZE)
         )
     )
-    if expired_ids:
-        db.execute(delete(AgentRun).where(AgentRun.session_id.in_(expired_ids)))
-        db.execute(delete(CareerSession).where(CareerSession.id.in_(expired_ids)))
+    if not expired_ids:
+        return None
+    thread_ids = interview_thread_ids(db, expired_ids)
+    db.execute(delete(AgentRun).where(AgentRun.session_id.in_(expired_ids)))
+    db.execute(delete(CareerSession).where(CareerSession.id.in_(expired_ids)))
     return ExpiredSessions(session_ids=expired_ids, interview_thread_ids=thread_ids)

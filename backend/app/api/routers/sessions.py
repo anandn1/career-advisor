@@ -1,11 +1,16 @@
 """Creating, reading, editing and deleting anonymous sessions, plus the summary report."""
 
+import logging
+
 from fastapi import APIRouter, status
 
 from app.api.deps import CurrentSession, Db
 from app.api.schemas import SessionCreate, SessionOut, SessionUpdate
 from app.db import career_sessions
 from app.db.models import RunKind
+from app.services.checkpoints import delete_interview_checkpoints
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -32,7 +37,14 @@ def update_session(body: SessionUpdate, career_session: CurrentSession):
 
 @router.delete("/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_session(career_session: CurrentSession, db: Db):
+    """Delete the session, its runs and files, and its interview transcripts."""
+    thread_ids = career_sessions.interview_thread_ids(db, [career_session.id])
     db.delete(career_session)
+    db.commit()
+    try:
+        delete_interview_checkpoints(thread_ids)
+    except Exception:  # the rows are already gone; log so leftovers can be cleaned up by hand
+        logger.exception("Could not delete interview checkpoints %s", thread_ids)
 
 
 def _latest_result(db, session_id: str, kind: RunKind) -> dict | None:
