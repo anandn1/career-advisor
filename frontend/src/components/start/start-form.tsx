@@ -18,16 +18,16 @@ const noSubscription = () => () => {};
 /** The opening route: from "You" to whatever role is being typed. */
 function OpeningRoute({ role }: { role: string }) {
   return (
-    <div aria-hidden className="flex items-center gap-0 overflow-hidden">
-      <span className="signage mr-3 text-sm text-ink-muted">You</span>
+    <div aria-hidden className="flex w-full min-w-0 items-center sm:w-auto">
+      <span className="signage mr-2 shrink-0 text-sm text-ink-muted sm:mr-3">You</span>
       {STATIONS.map((station) => (
-        <span key={station.id} className="flex items-center">
-          <span className="h-[7px] w-6 sm:w-12" style={{ background: station.colour }} />
+        <span key={station.id} className="flex flex-1 items-center sm:flex-none">
+          <span className="h-[7px] min-w-1.5 flex-1 sm:w-12 sm:flex-none" style={{ background: station.colour }} />
           <StationRoundel station={station} size="sm" />
         </span>
       ))}
-      <span className="h-[7px] w-6 bg-ink sm:w-12" />
-      <span className="rounded-md bg-ink px-3 py-1.5 font-heading text-base font-extrabold text-surface sm:text-lg">
+      <span className="h-[7px] min-w-1.5 flex-1 bg-ink sm:w-12 sm:flex-none" />
+      <span className="min-w-0 truncate rounded-md bg-ink px-2.5 py-1.5 font-heading text-sm font-extrabold whitespace-nowrap text-surface sm:px-3 sm:text-lg">
         {role.trim() || "Your next role"}
       </span>
     </div>
@@ -45,6 +45,15 @@ async function updateSession(sessionId: string, role: string, location: string) 
       body: { target_role: role, location },
     }),
   );
+}
+
+type CreatedSession = { id: string; role: string; location: string };
+
+/** The session to import into: a new one, or the one an earlier attempt created, kept up to date. */
+async function sessionFor(created: CreatedSession | null, role: string, location: string): Promise<string> {
+  if (!created) return (await createSession(role, location)).id;
+  if (created.role !== role || created.location !== location) await updateSession(created.id, role, location);
+  return created.id;
 }
 
 async function importBackground(sessionId: string, background: Background, file: File | null, github: string) {
@@ -75,7 +84,7 @@ export function StartForm() {
 
   // Once created, a retry reuses this session (updated if the role or place changed)
   // instead of creating, and orphaning, another.
-  const [created, setCreated] = useState<{ id: string; role: string; location: string } | null>(null);
+  const [created, setCreated] = useState<CreatedSession | null>(null);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -86,13 +95,7 @@ export function StartForm() {
     setError(null);
     setSubmitting(true);
     try {
-      let sessionId: string;
-      if (!created) {
-        sessionId = (await createSession(role, location)).id;
-      } else {
-        sessionId = created.id;
-        if (created.role !== role || created.location !== location) await updateSession(sessionId, role, location);
-      }
+      const sessionId = await sessionFor(created, role, location);
       setCreated({ id: sessionId, role, location });
       rememberSession(sessionId);
       await importBackground(sessionId, background, file, github);
