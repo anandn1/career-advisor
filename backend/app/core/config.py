@@ -28,9 +28,6 @@ class Settings(BaseSettings):
         repr=False,  # holds the database password
     )
 
-    embedding_model: str = "google/embeddinggemma-300m"
-    hf_token: SecretStr | None = None
-
     cohere_api_key: SecretStr | None = None
     tavily_api_key: SecretStr | None = None
     github_access_token: SecretStr | None = None
@@ -70,6 +67,10 @@ class Settings(BaseSettings):
     @property
     def interview_chroma_dir(self) -> Path:
         return self.data_dir / "chroma_interview"
+
+    @property
+    def embedding_model_dir(self) -> Path:
+        return self.data_dir / "models" / "embeddinggemma-300m-onnx"
 
     @property
     def output_dir(self) -> Path:

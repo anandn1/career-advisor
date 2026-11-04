@@ -12,9 +12,9 @@ from langchain_chroma import Chroma
 from langchain_core.documents import BaseDocumentCompressor
 from langchain_core.tools import BaseTool
 from langchain_groq import ChatGroq
-from langchain_huggingface import HuggingFaceEmbeddings
 
 from app.core.config import get_settings
+from app.core.embeddings import GemmaOnnxEmbeddings
 
 logger = logging.getLogger(__name__)
 
@@ -47,17 +47,10 @@ def get_resume_llm() -> ChatGroq:
 
 
 @cache
-def get_embeddings() -> HuggingFaceEmbeddings:
-    settings = get_settings()
-    model_kwargs: dict = {"device": "cpu", "trust_remote_code": True}
-    if settings.hf_token:
-        model_kwargs["token"] = settings.hf_token.get_secret_value()
-    logger.info("Loading embedding model %s", settings.embedding_model)
-    return HuggingFaceEmbeddings(
-        model_name=settings.embedding_model,
-        model_kwargs=model_kwargs,
-        encode_kwargs={"normalize_embeddings": True},
-    )
+def get_embeddings() -> GemmaOnnxEmbeddings:
+    model_dir = get_settings().embedding_model_dir
+    logger.info("Loading the embedding model from %s", model_dir)
+    return GemmaOnnxEmbeddings.load(model_dir)
 
 
 @cache
