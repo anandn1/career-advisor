@@ -34,10 +34,78 @@ graph TD
 
   * **Orchestration:** LangGraph (Stateful multi-agent workflows)
   * **LLM Engine:** Groq (Llama 3 / Mixtral for near-instant inference)
-  * **Embeddings:** Google EmbeddingGemma 300M (Running locally via SentenceTransformers)
+  * **Embeddings:** Google EmbeddingGemma 300M, 4-bit ONNX, run locally on the CPU (see [Embedding model](#embedding-model))
   * **Framework:** Python, LangChain
   * **Database:** PostgreSQL (SQLAlchemy + Alembic; LangGraph checkpoints)
   * **Vector Store:** ChromaDB (for RAG capabilities)
+
+## Embedding model
+
+Job postings, courses and interview questions are found by meaning, not keywords, using
+[EmbeddingGemma 300M](https://huggingface.co/google/embeddinggemma-300m) from Google. It runs on
+your own CPU, so searches cost nothing, need no API key and send no data anywhere.
+
+The app uses the 4-bit [ONNX build](https://huggingface.co/onnx-community/embeddinggemma-300m-ONNX)
+through ONNX Runtime, without PyTorch. That keeps the backend image around 2.6 GB instead of
+about 4.6 GB, and the model needs no Hugging Face token. The full 768 dimensions are kept.
+
+### How it was chosen
+
+Candidate models were scored on the app's own data (457 job postings, 578 interview questions
+and 23 courses) with 46 searches phrased the way the agents search. The score is nDCG, from 0 to
+1: how close the top results come to the ideal order, averaged over the three tasks.
+
+| Model | Dimensions | Score |
+| :--- | ---: | ---: |
+| EmbeddingGemma, full precision | 768 | 0.860 |
+| **EmbeddingGemma, 4-bit ONNX (used)** | 768 | **0.858** |
+| EmbeddingGemma, 8-bit ONNX | 768 | 0.855 |
+| EmbeddingGemma, full precision | 512 | 0.847 |
+| EmbeddingGemma, full precision | 256 | 0.816 |
+| BGE base v1.5 | 768 | 0.814 |
+| BGE small v1.5 | 384 | 0.781 |
+| EmbeddingGemma without its task prompts | 768 | 0.764 |
+| all-MiniLM-L6-v2 | 384 | 0.761 |
+| Snowflake Arctic Embed M v1.5 | 768 | 0.711 |
+
+Two findings shaped the setup:
+
+* **Task prompts matter.** EmbeddingGemma expects queries to start with
+  `task: search result | query: ` and documents with `title: none | text: `. Without them it
+  scored 0.764 instead of 0.860; the app adds both.
+* **4-bit costs no search quality here.** It scored the same as full precision while using
+  about a sixth of the disk space. Its vectors are 0.97 cosine-similar to the full-precision
+  ones on average (two unrelated texts score about 0.60).
+
+### Safety
+
+The ONNX conversion is published by the Hugging Face community organisation, not by Google, so
+the app does not trust it blindly:
+
+* It downloads one fixed commit (`5090578d`), so later changes to the repository never reach you.
+* Before loading, it checks every file against a SHA-256 fingerprint stored in
+  `backend/app/core/embeddings.py`. A file that does not match is deleted and the app stops with
+  an error instead of running it.
+* The pinned files were compared with Google's original model on all 1,104 test texts. Every
+  vector pointed the same way as the original's, with no outliers.
+
+### Resources
+
+Loading the model takes about 0.5 GB of RAM; embedding long job postings peaks at about 0.8 GB
+for the whole process. It embeds about 7 job postings a second on a laptop CPU.
+
+### Upgrading from an older version
+
+Earlier versions built the vector stores with a different setup of the model, and the old and
+new vectors cannot be mixed. Delete the old stores once and seed again:
+
+```bash
+cd backend
+rm -rf data/chroma_market data/chroma_courses data/chroma_interview
+uv run python -m app.agents.ingestion.seed_interview_db
+```
+
+The course catalog is rebuilt on first use. Cached job postings are scraped again as you search.
 
 ## Installation & Setup
 
@@ -45,7 +113,7 @@ graph TD
 
   * [uv](https://docs.astral.sh/uv/) (installs Python 3.12 for you)
   * PostgreSQL
-  * A Groq API key, and a Hugging Face token with access to `google/embeddinggemma-300m`
+  * A Groq API key
   * Optional: Cohere (reranking), Tavily (course search) and GitHub (rate limits) keys
   * Optional: TeX Live (`pdflatex`) to compile resumes to PDF; without it you get the `.tex` file
 
@@ -57,7 +125,7 @@ cd career-advisor/backend
 uv sync
 ```
 
-The first run downloads the EmbeddingGemma weights (about 300 MB).
+The first search downloads the embedding model (about 200 MB) into `backend/data/models/`.
 
 ### 2. Configure
 
