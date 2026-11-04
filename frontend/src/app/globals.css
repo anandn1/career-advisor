@@ -1,0 +1,99 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/* Transit-map design tokens. Colour lives on lines and station markers;
+   everything else is ink on cool paper. */
+@theme inline {
+  --color-paper: #f3f5f7;
+  --color-surface: #ffffff;
+  --color-ink: #14213d;
+  --color-ink-muted: #5b6b82;
+  --color-rule: #d5dce4;
+  --color-danger: #b42318;
+  --color-ok: #1e7f4f;
+
+  --color-line-skills: #00897b;
+  --color-line-market: #e8590c;
+  --color-line-path: #2f5bea;
+  --color-line-resume: #8e3b7a;
+  --color-line-interview: #c99700;
+  --color-line-report: #14213d;
+
+  --font-sans: var(--font-body);
+  --font-heading: var(--font-signage);
+  --font-signage: var(--font-signage);
+  --font-mono: var(--font-data);
+
+  /* shadcn/ui component colours, mapped onto the palette above */
+  --color-background: var(--color-paper);
+  --color-foreground: var(--color-ink);
+  --color-card: var(--color-surface);
+  --color-card-foreground: var(--color-ink);
+  --color-popover: var(--color-surface);
+  --color-popover-foreground: var(--color-ink);
+  --color-primary: var(--color-ink);
+  --color-primary-foreground: var(--color-surface);
+  --color-secondary: #e6eaef;
+  --color-secondary-foreground: var(--color-ink);
+  --color-muted: #e6eaef;
+  --color-muted-foreground: var(--color-ink-muted);
+  --color-accent: #e6eaef;
+  --color-accent-foreground: var(--color-ink);
+  --color-destructive: var(--color-danger);
+  --color-border: var(--color-rule);
+  --color-input: var(--color-rule);
+  --color-ring: var(--color-line-path);
+
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    @apply bg-paper font-sans text-ink antialiased;
+  }
+  :focus-visible {
+    outline: 3px solid var(--color-line-path);
+    outline-offset: 2px;
+  }
+  ::selection {
+    background: color-mix(in srgb, var(--color-line-path) 22%, transparent);
+  }
+}
+
+@layer components {
+  /* Small uppercase labels set like station signage. */
+  .signage {
+    font-family: var(--font-signage);
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+}
+
+/* A stop on a run line that is currently being served. */
+@keyframes stop-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--stop-colour) 45%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--stop-colour) 0%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -23,7 +23,7 @@ def _step_reporter(context: RunContext):
 def skills_from_resume(context: RunContext) -> dict:
     context.progress("extracting_skills")
     found = skills.extract_skills_from_text(context.input["resume_text"])
-    context.update_session(skills=found)
+    context.add_session_skills(found)
     return {"skills": found}
 
 
@@ -31,7 +31,8 @@ def skills_from_github(context: RunContext) -> dict:
     username = context.input["github_username"]
     context.progress("reading_github", {"username": username})
     found = skills.extract_skills_from_github(username)
-    context.update_session(skills=found, github_username=username)
+    context.add_session_skills(found)
+    context.update_session(github_username=username)
     return {"skills": found}
 
 

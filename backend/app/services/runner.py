@@ -11,6 +11,9 @@ from collections.abc import Callable
 from concurrent.futures import Executor, ThreadPoolExecutor
 from dataclasses import dataclass, field
 
+from sqlalchemy.orm import Session
+
+from app.db.career_sessions import unique_ignoring_case
 from app.db.models import AgentRun, CareerSession, RunKind, RunStatus, utcnow
 from app.db.session import session_scope
 
@@ -46,11 +49,24 @@ class RunContext:
             run.events = [*run.events, event]
 
     def update_session(self, **fields) -> None:
-        """Write results that belong to the session itself (e.g. extracted skills)."""
+        """Write results that belong to the session itself (e.g. its GitHub username)."""
         with session_scope() as db:
-            career_session = db.get(CareerSession, self.session_id)
+            career_session = self._live_session(db)
             for name, value in fields.items():
                 setattr(career_session, name, value)
+
+    def add_session_skills(self, found: list[str]) -> None:
+        """Merge `found` into the session's skills as stored now (not the start-of-run snapshot),
+        so edits made while the run was working are kept."""
+        with session_scope() as db:
+            career_session = self._live_session(db)
+            career_session.skills = unique_ignoring_case([*(career_session.skills or []), *found])
+
+    def _live_session(self, db: Session) -> CareerSession:
+        career_session = db.get(CareerSession, self.session_id)
+        if career_session is None:
+            raise RunGoneError("The session was deleted while this run was in progress.")
+        return career_session
 
 
 Handler = Callable[[RunContext], dict]
