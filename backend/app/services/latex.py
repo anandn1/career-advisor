@@ -51,6 +51,9 @@ def _run_pdflatex(work_dir: Path) -> subprocess.CompletedProcess:
             env=_environment(work_dir),
             capture_output=True,
             text=True,
+            # pdflatex echoes input bytes that are not always UTF-8; the output is only a log.
+            encoding="utf-8",
+            errors="replace",
             timeout=COMPILE_TIMEOUT_SECONDS,
             check=False,
         )

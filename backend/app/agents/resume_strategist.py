@@ -7,6 +7,7 @@ then a full LaTeX document that follows a reference template's style.
 import json
 import logging
 import re
+import unicodedata
 from pathlib import Path
 
 from langchain_core.output_parsers import StrOutputParser
@@ -32,7 +33,76 @@ LATEX_SPECIAL_CHARACTERS = {
     "}": r"\}",
     "~": r"\textasciitilde{}",
     "^": r"\textasciicircum{}",
+    # The default font encoding prints these as "¡", "¿", "—" and "”".
+    "<": r"\textless{}",
+    ">": r"\textgreater{}",
+    "|": r"\textbar{}",
+    '"': "''",
+    # A blank line ends a paragraph, which LaTeX rejects inside a command argument.
+    "\n": " ",
+    "\r": " ",
+    "\t": " ",
 }
+# Unicode that models often write and pdflatex cannot print, as LaTeX that it can.
+UNICODE_REPLACEMENTS = {
+    "\u00a0": "~",  # no-break space
+    "\u202f": "~",  # narrow no-break space
+    "\u2009": r"\,",  # thin space
+    "\u2002": " ",  # en space
+    "\u2003": " ",  # em space
+    "\u2007": " ",  # figure space
+    "\u2008": " ",  # punctuation space
+    "\u2010": "-",  # hyphen
+    "\u2011": "-",  # non-breaking hyphen
+    "\u2012": "--",  # figure dash
+    "\u2013": "--",  # en dash
+    "\u2014": "---",  # em dash
+    "\u2212": "-",  # minus sign
+    "\u2032": "'",  # prime
+    "\u2033": "''",  # double prime
+    "\u2264": r"$\leq$",
+    "\u2265": r"$\geq$",
+    "\u2248": r"$\approx$",
+    "\u2260": r"$\neq$",
+    "\u21d2": r"$\Rightarrow$",
+    "\u2219": r"\textbullet{}",  # bullet operator
+    "\u25aa": r"\textbullet{}",  # small black square
+    "\u25cf": r"\textbullet{}",  # black circle
+    "\u25e6": r"\textbullet{}",  # white bullet
+}
+# Every other character is kept only if pdflatex prints it under both the default and the
+# T1 font encoding (each was compiled in the backend image); the rest, such as emoji, are
+# dropped, because one unprintable character fails the whole PDF.
+PRINTABLE_RANGES = (
+    (0x0020, 0x007E),
+    (0x00A1, 0x00AA),
+    (0x00AC, 0x00BA),
+    (0x00BC, 0x00CF),
+    (0x00D1, 0x00DD),
+    (0x00DF, 0x00EF),
+    (0x00F1, 0x00FD),
+    (0x00FF, 0x0103),
+    (0x0106, 0x010F),
+    (0x0112, 0x0117),
+    (0x011A, 0x0125),
+    (0x0128, 0x012D),
+    (0x0130, 0x0137),
+    (0x0139, 0x013E),
+    (0x0141, 0x0148),
+    (0x014C, 0x0165),
+    (0x0168, 0x0171),
+    (0x0174, 0x017E),
+    (0x0192, 0x0192),
+    (0x2015, 0x2016),
+    (0x2018, 0x2019),
+    (0x201C, 0x201D),
+    (0x2020, 0x2022),
+    (0x2026, 0x2026),
+    (0x2030, 0x2031),
+    (0x20AC, 0x20AC),
+    (0x2122, 0x2122),
+    (0x2190, 0x2193),
+)
 _FENCED_BLOCK = re.compile(r"```[^\n]*\n(.*?)(?:\n```|$)", re.DOTALL)
 # '%' starts a comment unless escaped as '\%' ('\\%' is a line break, then a comment).
 _LATEX_COMMENT = re.compile(r"(?<!\\)((?:\\\\)*)%.*$", re.MULTILINE)
@@ -140,16 +210,40 @@ Rules:
 1. Copy the template's \\documentclass line and entire preamble (packages, \\newcommand
    definitions, formatting settings) exactly.
 2. Use the template's own custom commands and section layout for every entry.
-3. Replace only the content with the resume data. Leave out sections with no data.
+3. Replace only the content with the resume data. Leave out every section, entry and
+   contact item (with its icon and separator) that has no data; never leave a placeholder.
 4. Use only packages that the template already loads.
 5. Output only raw LaTeX starting with \\documentclass: no markdown fences, no commentary."""
 )
 
 
+def _is_printable(char: str) -> bool:
+    code = ord(char)
+    return any(low <= code <= high for low, high in PRINTABLE_RANGES)
+
+
+def _escape_character(char: str) -> str:
+    if char in LATEX_SPECIAL_CHARACTERS:
+        return LATEX_SPECIAL_CHARACTERS[char]
+    if char in UNICODE_REPLACEMENTS:
+        return UNICODE_REPLACEMENTS[char]
+    return char if _is_printable(char) else ""
+
+
 def escape_latex(value):
-    """Recursively escape LaTeX special characters in strings inside dicts/lists."""
+    """Recursively make strings inside dicts/lists safe for pdflatex.
+
+    LaTeX special characters are escaped, accents typed as two characters are joined
+    ("e" + U+0301 becomes "é"), and characters pdflatex cannot print are converted or dropped.
+    """
     if isinstance(value, str):
-        return "".join(LATEX_SPECIAL_CHARACTERS.get(char, char) for char in value)
+        text = unicodedata.normalize("NFC", value)
+        escaped = [(char, _escape_character(char)) for char in text]
+        dropped = {char for char, out in escaped if not out and char.isprintable()}
+        if dropped:
+            left_out = "".join(sorted(dropped))
+            logger.warning("Left out characters pdflatex cannot print: %s", left_out)
+        return "".join(out for _, out in escaped)
     if isinstance(value, dict):
         return {key: escape_latex(item) for key, item in value.items()}
     if isinstance(value, list):
@@ -231,7 +325,8 @@ def render_latex(draft: ResumeDraft, template_latex: str) -> str:
     raw = chain.invoke(
         {
             "template": template_latex,
-            "resume": json.dumps(escape_latex(draft.model_dump()), indent=2),
+            # Non-ASCII text as itself: a "\u00e9" escape copied into LaTeX is an accent command.
+            "resume": json.dumps(escape_latex(draft.model_dump()), indent=2, ensure_ascii=False),
         }
     )
     return validate_latex(strip_code_fences(raw))
