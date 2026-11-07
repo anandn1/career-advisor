@@ -3,6 +3,8 @@
 No test reads the real .env, touches backend/data, opens Postgres or calls an LLM.
 """
 
+import os
+
 import pytest
 from langchain_core.runnables import RunnableLambda
 from sqlalchemy import create_engine, event
@@ -11,6 +13,7 @@ from app.agents import curriculum_architect, interview_coach, job_market_analyst
 from app.core import checkpointer, config, resources
 from app.db import session as db_session
 from app.db.models import Base
+from evals import judge as eval_judge
 
 CACHED_FACTORIES = (
     config.get_settings,
@@ -26,6 +29,7 @@ CACHED_FACTORIES = (
     interview_coach.get_interview_graph,
     db_session.get_engine,
     db_session._session_factory,
+    eval_judge.get_judge,
 )
 OPTIONAL_KEYS = (
     "COHERE_API_KEY",
@@ -35,6 +39,11 @@ OPTIONAL_KEYS = (
     "CORS_ORIGINS",
     "EMBEDDING_MODEL_DIR",
     "DB_URL",
+    "GEMINI_API_KEY",
+    "LLM_MODEL",
+    "LLM_REASONING_EFFORT",
+    "RESUME_LLM_MODEL",
+    "RESUME_LLM_REASONING_EFFORT",
 )
 
 
@@ -47,12 +56,15 @@ def _clear_caches() -> None:
 def isolated_settings(monkeypatch, tmp_path):
     """Fake required settings, no optional keys, no .env files, data under tmp_path."""
     monkeypatch.setitem(config.Settings.model_config, "env_file", None)
+    monkeypatch.setitem(eval_judge.EvalSettings.model_config, "env_file", None)
     monkeypatch.setenv("GROQ_API_KEY", "test-groq-key")
     monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@localhost:5432/test")
     monkeypatch.setenv("DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("ANONYMIZED_TELEMETRY", "False")
-    for key in OPTIONAL_KEYS:
-        monkeypatch.delenv(key, raising=False)
+    cleared = {key.lower() for key in OPTIONAL_KEYS}
+    for name in list(os.environ):  # settings names match in any case
+        if name.lower() in cleared:
+            monkeypatch.delenv(name)
     _clear_caches()
     yield
     _clear_caches()

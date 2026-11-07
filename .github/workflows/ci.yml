@@ -25,8 +25,8 @@ jobs:
           working-directory: backend
           enable-cache: true
       - run: uv sync --frozen
-      - run: uv run ruff check app migrations tests
-      - run: uv run ruff format --check app migrations tests
+      - run: uv run ruff check app migrations tests evals
+      - run: uv run ruff format --check app migrations tests evals
       - run: uv run pytest
 
   frontend:

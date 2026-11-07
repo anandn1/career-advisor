@@ -27,6 +27,7 @@ def get_llm() -> ChatGroq:
     return ChatGroq(
         model=settings.llm_model,
         temperature=0,
+        reasoning_effort=settings.llm_reasoning_effort,
         api_key=settings.groq_api_key,
     )
 
@@ -36,12 +37,13 @@ RESUME_MAX_TOKENS = 6000
 
 @cache
 def get_resume_llm() -> ChatGroq:
-    """Larger model with a long output budget, for full LaTeX documents."""
+    """The model for resume drafts and LaTeX, with a long output budget for full documents."""
     settings = get_settings()
     return ChatGroq(
         model=settings.resume_llm_model,
         temperature=0.1,
         max_tokens=RESUME_MAX_TOKENS,
+        reasoning_effort=settings.resume_llm_reasoning_effort,
         api_key=settings.groq_api_key,
     )
 

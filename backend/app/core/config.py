@@ -3,7 +3,7 @@
 import json
 from functools import cache
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import AliasChoices, Field, SecretStr, field_validator, model_validator
 from pydantic_core import PydanticUseDefault
@@ -13,6 +13,9 @@ BACKEND_DIR = Path(__file__).resolve().parents[2]
 REPO_ROOT = BACKEND_DIR.parent
 
 EMBEDDING_MODEL_SUBDIR = Path("models", "embeddinggemma-300m-onnx")  # inside data_dir
+
+# For reasoning models such as gpt-oss; "none" for models without reasoning.
+ReasoningEffort = Literal["low", "medium", "high"]
 
 
 def _trimmed_or_default(value):
@@ -32,8 +35,11 @@ class Settings(BaseSettings):
     )
 
     groq_api_key: SecretStr
-    llm_model: str = "llama-3.3-70b-versatile"
-    resume_llm_model: str = "openai/gpt-oss-120b"
+    # Chosen by the model evals in backend/evals/ (see its README for the evidence).
+    llm_model: str = "openai/gpt-oss-120b"
+    llm_reasoning_effort: ReasoningEffort | None = "medium"
+    resume_llm_model: str = "openai/gpt-oss-20b"
+    resume_llm_reasoning_effort: ReasoningEffort | None = "low"
 
     database_url: str = Field(
         validation_alias=AliasChoices("DATABASE_URL", "DB_URL"),
@@ -70,6 +76,23 @@ class Settings(BaseSettings):
     @classmethod
     def _trim_path(cls, value):
         """A blank path would be read as a folder named by its spaces."""
+        return _trimmed_or_default(value)
+
+    @field_validator("llm_reasoning_effort", "resume_llm_reasoning_effort", mode="before")
+    @classmethod
+    def _normalise_effort(cls, value):
+        """Case and spaces don't matter; "none" sends a null effort, which Groq accepts for
+        models without reasoning (they reject "low")."""
+        value = _trimmed_or_default(value)
+        if not isinstance(value, str):
+            return value
+        value = value.lower()
+        return None if value == "none" else value
+
+    @field_validator("llm_model", "resume_llm_model", mode="before")
+    @classmethod
+    def _trim_model(cls, value):
+        """A padded or blank model name would only fail later, as a 404 from Groq."""
         return _trimmed_or_default(value)
 
     @field_validator("cors_origins", mode="before")

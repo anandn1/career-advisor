@@ -1,0 +1,180 @@
+{
+  "about": "Resume strategist and reviewer. 'generation': profiles for the two-step draft + LaTeX pipeline. 'must_keep' strings must appear in the LaTeX (after un-escaping); 'known_numbers' are the only numbers the resume may state as metrics, so any other percentage or multiplier counts as invented. 'template_markers' are placeholder or sample text from the reference template (1.tex by default, or the case's template); finding any in the resume means template content leaked in. The LaTeX must pass the app's validation and compile. 'review': resumes for the reviewer; the judge checks every point is grounded in the text.",
+  "generation": [
+    {
+      "id": "backend-engineer",
+      "template": null,
+      "profile": {
+        "target_role": "Senior Backend Engineer",
+        "contact": {
+          "name": "Priya Sharma",
+          "email": "priya.sharma@example.com",
+          "phone": "+91 98765 43210",
+          "location": "Bengaluru, India",
+          "github": ""
+        },
+        "education": [
+          {
+            "institution": "VIT Vellore",
+            "degree": "B.Tech",
+            "field": "Computer Science",
+            "status": "Graduated May 2022",
+            "location": "Vellore, India",
+            "gpa": "8.7/10"
+          }
+        ],
+        "work_experience": [
+          {
+            "company": "Zeta Payments",
+            "position": "Software Engineer",
+            "location": "Bengaluru",
+            "duration": "Jul 2022 - Present",
+            "description_bullets": [
+              "Built payment reconciliation services in Go and Python (FastAPI) on PostgreSQL",
+              "Moved nightly batch jobs to Kafka streams, so settlement reports arrive within minutes instead of the next morning",
+              "Cut p99 API latency by 40% with Redis caching",
+              "Deployed services on Kubernetes (EKS) with Terraform"
+            ]
+          },
+          {
+            "company": "Infosys",
+            "position": "Software Engineering Intern",
+            "location": "Mysuru",
+            "duration": "Jan 2021 - Jun 2021",
+            "description_bullets": [
+              "Wrote REST APIs in Java with Spring Boot for an internal HR tool"
+            ]
+          }
+        ],
+        "skills": [
+          "Go",
+          "Python",
+          "Java",
+          "FastAPI",
+          "Spring Boot",
+          "PostgreSQL",
+          "Redis",
+          "Kafka",
+          "Kubernetes",
+          "Terraform",
+          "Docker",
+          "Git",
+          "Linux",
+          "Prometheus",
+          "Grafana"
+        ]
+      },
+      "must_keep": [
+        "Priya Sharma",
+        "priya.sharma@example.com",
+        "+91 98765 43210",
+        "Zeta Payments",
+        "Infosys",
+        "VIT Vellore",
+        "40%"
+      ],
+      "known_numbers": [
+        "40",
+        "99",
+        "8.7",
+        "10",
+        "2021",
+        "2022",
+        "91",
+        "98765",
+        "43210"
+      ],
+      "template_markers": [
+        "Your Name",
+        "blah blah",
+        "Designation",
+        "Some Project",
+        "mysite.com",
+        "email@mysite.com"
+      ]
+    },
+    {
+      "id": "graduate-data-analyst",
+      "template": "10",
+      "profile": {
+        "target_role": "Data Analyst",
+        "contact": {
+          "name": "Ananya Rao",
+          "email": "ananya.rao@example.com",
+          "phone": "+91 91234 56780",
+          "location": "Hyderabad, India",
+          "github": "https://github.com/ananyarao"
+        },
+        "education": [
+          {
+            "institution": "University of Hyderabad",
+            "degree": "M.Sc.",
+            "field": "Statistics",
+            "status": "Graduated June 2026",
+            "location": "Hyderabad, India",
+            "gpa": ""
+          }
+        ],
+        "work_experience": [
+          {
+            "company": "Deloitte",
+            "position": "Analytics Intern",
+            "location": "Hyderabad",
+            "duration": "May 2025 - Jul 2025",
+            "description_bullets": [
+              "Cleaned and joined sales data from three regional systems in SQL",
+              "Built a Power BI dashboard the regional managers used in weekly reviews",
+              "Wrote Python scripts with pandas to automate a monthly Excel report"
+            ]
+          }
+        ],
+        "skills": [
+          "SQL",
+          "Python",
+          "pandas",
+          "Power BI",
+          "Excel",
+          "Statistics",
+          "R"
+        ]
+      },
+      "must_keep": [
+        "Ananya Rao",
+        "ananya.rao@example.com",
+        "Deloitte",
+        "University of Hyderabad",
+        "Power BI"
+      ],
+      "known_numbers": [
+        "2025",
+        "2026",
+        "91",
+        "91234",
+        "56780"
+      ],
+      "template_markers": [
+        "FIRSTNAME",
+        "LASTNAME",
+        "Weyland Yutani",
+        "Tessier-Ashpoole",
+        "LexCorp",
+        "Chess Engine",
+        "first.last@email.com"
+      ]
+    }
+  ],
+  "review": [
+    {
+      "id": "backend-for-senior",
+      "resume": "skills.json#backend-engineer",
+      "target_role": "Senior Backend Engineer",
+      "request": ""
+    },
+    {
+      "id": "mechanical-for-robotics-software",
+      "resume": "skills.json#mechanical-engineer",
+      "target_role": "Robotics Software Engineer",
+      "request": "Be honest about what is missing for a software role."
+    }
+  ]
+}

@@ -1,0 +1,108 @@
+{
+  "about": "Skill extraction. Each case lists the skills a careful reader finds in the text ('expected', each a group of accepted spellings) and further items that are fair but not required ('acceptable'). Anything else the model returns counts against precision.",
+  "cases": [
+    {
+      "id": "backend-engineer",
+      "source": "resume",
+      "text": "Priya Sharma | Backend Engineer | priya.sharma@example.com\n\nEXPERIENCE\nSoftware Engineer, Zeta Payments (2022 - present)\n- Built payment reconciliation services in Go and Python (FastAPI) on PostgreSQL.\n- Moved nightly batch jobs to Apache Kafka streams.\n- Deployed services on Kubernetes (EKS) with Terraform.\n- Cut p99 latency by 40% with Redis caching.\n\nSoftware Engineering Intern, Infosys (2021)\n- Wrote REST APIs in Java with Spring Boot.\n\nEDUCATION\nB.Tech Computer Science, VIT (2022)\n\nSKILLS\nGo, Python, Java, SQL, Docker, Git, Linux, Prometheus, Grafana\n\nOTHER\nLed the college debate club. Fluent in Hindi and Tamil.",
+      "expected": [
+        ["Go", "Golang"],
+        ["Python"],
+        ["FastAPI"],
+        ["PostgreSQL", "Postgres"],
+        ["Kafka", "Apache Kafka"],
+        ["Kubernetes", "K8s", "EKS", "Amazon EKS"],
+        ["Terraform"],
+        ["Redis"],
+        ["Java"],
+        ["Spring Boot", "Spring"],
+        ["SQL"],
+        ["Docker"],
+        ["Git"],
+        ["Linux"],
+        ["Prometheus"],
+        ["Grafana"]
+      ],
+      "acceptable": ["REST", "REST API", "REST APIs", "RESTful APIs", "AWS", "Caching", "Microservices", "Stream Processing", "Distributed Systems", "Backend Development", "API Development"]
+    },
+    {
+      "id": "data-scientist",
+      "source": "resume",
+      "text": "Arjun Mehta - Data Scientist\n\nData Scientist, Swiggy (2021 - present)\n* Built demand forecasting models with XGBoost and LightGBM.\n* Deployed models with MLflow and scheduled retraining in Airflow.\n* Analysis in pandas and SQL on Snowflake; dashboards in Tableau.\n\nML Intern, Fractal Analytics (2020)\n* Fine-tuned BERT models in PyTorch for text classification.\n\nEducation: M.Sc. Statistics, Indian Statistical Institute, Kolkata\nSkills: Python, R, scikit-learn, NumPy, A/B testing, time-series forecasting\nHobbies: chess, marathon running",
+      "expected": [
+        ["Python"],
+        ["R"],
+        ["XGBoost"],
+        ["LightGBM"],
+        ["MLflow"],
+        ["Airflow", "Apache Airflow"],
+        ["pandas"],
+        ["SQL"],
+        ["Snowflake"],
+        ["Tableau"],
+        ["BERT"],
+        ["PyTorch"],
+        ["scikit-learn", "sklearn"],
+        ["NumPy"],
+        ["A/B testing", "AB testing", "A/B tests"],
+        ["Time-series forecasting", "Time series forecasting", "Time series", "Time-series analysis", "Forecasting", "Demand forecasting"]
+      ],
+      "acceptable": ["Machine Learning", "NLP", "Natural Language Processing", "Text Classification", "Deep Learning", "Statistics", "Statistical Analysis", "Data Analysis", "Transformers", "Model Deployment", "MLOps", "Data Visualization", "Gradient Boosting"]
+    },
+    {
+      "id": "frontend-developer",
+      "source": "resume",
+      "text": "RAHUL K | rahul.k@example.com | Bengaluru\n\nSUMMARY  Frontend developer, 2 yrs. Passionate team player with excellent communication.\n\nWORK  UI Developer @ Freshworks (2023-now)\n * Rebuilt the billing dashboard in React + TypeScript, state via Redux Toolkit\n * Styled with Tailwind CSS; component docs in Storybook\n * Wrote unit tests with Jest and React Testing Library, e2e with Cypress\n * Lighthouse score 62 -> 91 (code splitting with Webpack)\n\nPROJECTS  Portfolio site (Next.js, deployed on Vercel); Chrome extension (vanilla JavaScript, HTML5, CSS3)\n\nEDU  BCA, Christ University 2023",
+      "expected": [
+        ["React", "React.js", "ReactJS"],
+        ["TypeScript"],
+        ["Redux Toolkit", "Redux"],
+        ["Tailwind CSS", "Tailwind"],
+        ["Storybook"],
+        ["Jest"],
+        ["React Testing Library"],
+        ["Cypress"],
+        ["Webpack"],
+        ["Next.js", "NextJS"],
+        ["JavaScript"],
+        ["HTML", "HTML5"],
+        ["CSS", "CSS3"]
+      ],
+      "acceptable": ["Vercel", "Lighthouse", "Code Splitting", "Chrome Extensions", "Unit Testing", "End-to-end Testing", "E2E Testing", "Frontend Development", "Web Performance", "Performance Optimization", "State Management", "Testing", "Bundling", "Component Documentation", "UI Development", "Deployment"]
+    },
+    {
+      "id": "mechanical-engineer",
+      "source": "resume",
+      "about": "Few software skills: tests that the model does not add programming languages that are not there.",
+      "text": "Sneha Iyer - Mechanical Design Engineer\n\nDesign Engineer, Tata Motors (2019 - present)\n- Designed brake assemblies in SolidWorks and CATIA.\n- Ran finite element analysis in ANSYS.\n- Applied GD&T per ASME Y14.5.\n- Automated bill-of-materials reports with Excel VBA.\n\nGraduate Engineer Trainee, Larsen & Toubro (2018)\n- Supervised shop-floor quality checks (Six Sigma Green Belt).\n\nEducation: B.E. Mechanical Engineering, Anna University\nSkills: AutoCAD, MATLAB, project coordination",
+      "expected": [
+        ["SolidWorks"],
+        ["CATIA"],
+        ["ANSYS"],
+        ["FEA", "Finite Element Analysis"],
+        ["GD&T", "Geometric Dimensioning and Tolerancing"],
+        ["VBA", "Excel VBA"],
+        ["AutoCAD"],
+        ["MATLAB"]
+      ],
+      "acceptable": ["Excel", "Microsoft Excel", "Six Sigma", "Six Sigma Green Belt", "ASME Y14.5", "Bill of Materials", "BOM", "CAD", "Mechanical Design", "Quality Control", "Quality Assurance"]
+    },
+    {
+      "id": "github-ml-infra",
+      "source": "github",
+      "text": "Repo Languages: \"Python, Jupyter Notebook, Rust, Shell, Dockerfile\"\nProfile README: \"Hi, I'm Kavya. I work on ML infrastructure. Currently building a vector database in Rust and serving LLMs with vLLM. I use PyTorch, Ray and Kubernetes daily. Learning: Zig. Fun fact: I brew a mean pour-over coffee.\"",
+      "expected": [
+        ["Python"],
+        ["Rust"],
+        ["Shell", "Bash", "Shell Scripting"],
+        ["Docker", "Dockerfile"],
+        ["PyTorch"],
+        ["Ray"],
+        ["Kubernetes", "K8s"],
+        ["vLLM"],
+        ["Jupyter", "Jupyter Notebook"]
+      ],
+      "acceptable": ["Zig", "Vector Databases", "Vector Database", "LLMs", "LLM", "LLM Serving", "Large Language Models", "ML Infrastructure", "Machine Learning", "MLOps", "Machine Learning Infrastructure"]
+    }
+  ]
+}

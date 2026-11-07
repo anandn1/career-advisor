@@ -33,11 +33,26 @@ graph TD
 ## Tech Stack
 
   * **Orchestration:** LangGraph (Stateful multi-agent workflows)
-  * **LLM Engine:** Groq (Llama 3 / Mixtral for near-instant inference)
+  * **LLM Engine:** Groq: gpt-oss-120b for the agents, gpt-oss-20b for resume writing (see [Language models](#language-models))
   * **Embeddings:** Google EmbeddingGemma 300M, 4-bit ONNX, run locally on the CPU (see [Embedding model](#embedding-model))
   * **Framework:** Python, LangChain
   * **Database:** PostgreSQL (SQLAlchemy + Alembic; LangGraph checkpoints)
   * **Vector Store:** ChromaDB (for RAG capabilities)
+
+## Language models
+
+The agents run on Groq. Which model does which job was decided by evals on the app's own
+tasks: 12 tasks, one per place an agent calls a model, scored against hand-checked labels and,
+for open-ended text, by a separate Gemini judge. The method, results and limits are in
+[backend/evals/README.md](backend/evals/README.md).
+
+| Used for | Model | Why |
+| :--- | :--- | :--- |
+| Every agent except resume writing | `openai/gpt-oss-120b`, medium reasoning | Graded interview answers 0.88 against 0.72 for 20b, chose follow-ups best (21/24), parsed every course search correctly |
+| Resume draft and LaTeX | `openai/gpt-oss-20b`, low reasoning | As good as 120b on resumes at half the price; 120b at medium skipped the required tool call on most drafts |
+
+Both can be changed with `LLM_MODEL`, `RESUME_LLM_MODEL` and their `*_REASONING_EFFORT`
+settings (see `.env.example`).
 
 ## Embedding model
 

@@ -1,0 +1,226 @@
+{
+  "about": "Template tagging over backend/templates/*.tex. 'required' lists groups: at least one tag of each group must be chosen. 'forbidden' tags clearly do not fit. Tags in neither list are fine either way. Inline cases (with a 'latex' field) are short CVs outside tech, so a constant answer such as 'Technology, Engineering' cannot pass most cases.",
+  "cases": [
+    {
+      "template": "1",
+      "about": "Generic academic/tech CV with GitHub link and publications",
+      "required": [
+        [
+          "Technology",
+          "Software Development",
+          "Engineering"
+        ]
+      ],
+      "forbidden": [
+        "Business & Finance",
+        "Design & User Experience"
+      ]
+    },
+    {
+      "template": "2",
+      "about": "Electrical engineering graduate seeking a teaching job (lists Python, C++ and deep learning, so Software Development is allowed)",
+      "required": [
+        [
+          "Engineering"
+        ]
+      ],
+      "forbidden": [
+        "Startup",
+        "Freelance",
+        "Business & Finance",
+        "Design & User Experience"
+      ]
+    },
+    {
+      "template": "3",
+      "about": "High-school student: student government, classes, awards",
+      "required": [],
+      "forbidden": [
+        "Freelance",
+        "Startup"
+      ]
+    },
+    {
+      "template": "4",
+      "about": "Same EEE graduate as 2, moderncv layout (lists Python, C++ and deep learning, so Software Development is allowed)",
+      "required": [
+        [
+          "Engineering"
+        ]
+      ],
+      "forbidden": [
+        "Startup",
+        "Freelance",
+        "Business & Finance",
+        "Design & User Experience"
+      ]
+    },
+    {
+      "template": "5",
+      "about": "Sample master's student, Python/C++/Java, Git/Docker/React",
+      "required": [
+        [
+          "Technology",
+          "Software Development"
+        ]
+      ],
+      "forbidden": [
+        "Business & Finance",
+        "Freelance",
+        "Design & User Experience"
+      ]
+    },
+    {
+      "template": "6",
+      "about": "Generic engineering/tech template with patents, publications and IEEE profile",
+      "required": [
+        [
+          "Technology",
+          "Engineering"
+        ]
+      ],
+      "forbidden": [
+        "Business & Finance",
+        "Freelance"
+      ]
+    },
+    {
+      "template": "7",
+      "about": "Financial advisor, 7+ years, portfolios",
+      "required": [
+        [
+          "Business & Finance"
+        ]
+      ],
+      "forbidden": [
+        "Software Development",
+        "Engineering",
+        "Design & User Experience",
+        "Startup"
+      ]
+    },
+    {
+      "template": "8",
+      "about": "IIT M.Tech in CS with deep-learning projects",
+      "required": [
+        [
+          "Technology",
+          "Software Development",
+          "Engineering"
+        ]
+      ],
+      "forbidden": [
+        "Business & Finance",
+        "Design & User Experience",
+        "Freelance"
+      ]
+    },
+    {
+      "template": "9",
+      "about": "Europass CV: European project manager, independent consultant, youth-policy research",
+      "required": [],
+      "forbidden": [
+        "Software Development",
+        "Engineering",
+        "Startup",
+        "Design & User Experience"
+      ]
+    },
+    {
+      "template": "10",
+      "about": "Program manager and former software developer; REST APIs, React, Docker",
+      "required": [
+        [
+          "Software Development",
+          "Technology"
+        ]
+      ],
+      "forbidden": [
+        "Freelance",
+        "Design & User Experience"
+      ]
+    },
+    {
+      "template": "inline-ux-designer",
+      "about": "Product designer; no engineering",
+      "required": [
+        [
+          "Design & User Experience"
+        ]
+      ],
+      "forbidden": [
+        "Engineering",
+        "Software Development",
+        "Business & Finance"
+      ],
+      "latex": "\\documentclass[11pt]{article}\n\\begin{document}\n\\section*{Meera Nair -- Senior Product Designer}\n\\section*{Experience}\nLead Designer, Swiggy (2021--present): redesigned the checkout flow in Figma, ran 40 usability tests, built the design system used by 12 squads.\\\\\nUX Designer, Zomato (2018--2021): user research, wireframes, prototyping and accessibility audits.\n\\section*{Skills}\nFigma, user research, interaction design, prototyping, design systems, accessibility\n\\end{document}\n"
+    },
+    {
+      "template": "inline-freelance-writer",
+      "about": "Freelance content writer",
+      "required": [
+        [
+          "Freelance"
+        ]
+      ],
+      "forbidden": [
+        "Technology",
+        "Engineering",
+        "Software Development",
+        "Corporate"
+      ],
+      "latex": "\\documentclass[11pt]{article}\n\\begin{document}\n\\section*{Kabir Malhotra -- Freelance Content Writer}\n\\section*{Clients (2019--present, self-employed)}\nTravel features for Lonely Planet India; food columns for a Mumbai weekly; brand stories for independent cafes and boutique hotels.\n\\section*{Skills}\nLong-form writing, editing, interviewing, SEO copywriting, pitching to editors\n\\end{document}\n"
+    },
+    {
+      "template": "inline-accountant",
+      "about": "Chartered accountant at a large firm",
+      "required": [
+        [
+          "Business & Finance"
+        ]
+      ],
+      "forbidden": [
+        "Technology",
+        "Engineering",
+        "Software Development",
+        "Design & User Experience",
+        "Freelance",
+        "Startup"
+      ],
+      "latex": "\\documentclass[11pt]{article}\n\\begin{document}\n\\section*{Ritu Agarwal, CA -- Senior Audit Associate}\n\\section*{Experience}\nSenior Associate, Deloitte Haskins \\& Sells (2020--present): statutory audits of listed manufacturing companies, Ind AS reporting, internal controls testing.\\\\\nArticleship, KPMG India (2017--2020): tax audits and GST compliance.\n\\section*{Qualifications}\nChartered Accountant (ICAI), B.Com, University of Delhi\n\\end{document}\n"
+    },
+    {
+      "template": "inline-bakery-founder",
+      "about": "Founder of a two-year-old bakery chain",
+      "required": [
+        [
+          "Startup"
+        ]
+      ],
+      "forbidden": [
+        "Technology",
+        "Engineering",
+        "Software Development",
+        "Corporate"
+      ],
+      "latex": "\\documentclass[11pt]{article}\n\\begin{document}\n\\section*{Ananya Iyer -- Founder, Crumb \\& Co. Bakeries}\n\\section*{Experience}\nFounder and CEO, Crumb \\& Co. (2024--present): raised a seed round from angel investors, grew from one kitchen to six outlets in Pune, hired and trained 45 staff.\\\\\nPastry Chef, Taj Hotels (2019--2024).\n\\section*{Skills}\nMenu development, fundraising, hiring, vendor negotiation, food safety\n\\end{document}\n"
+    },
+    {
+      "template": "inline-marketing-manager",
+      "about": "Brand marketing manager at a consumer-goods multinational",
+      "required": [
+        [
+          "Corporate",
+          "Business & Finance"
+        ]
+      ],
+      "forbidden": [
+        "Technology",
+        "Engineering",
+        "Software Development",
+        "Freelance"
+      ],
+      "latex": "\\documentclass[11pt]{article}\n\\begin{document}\n\\section*{Rohan Desai -- Brand Manager}\n\\section*{Experience}\nBrand Manager, Hindustan Unilever (2021--present): ran national campaigns for two detergent brands, managed a 30 crore media budget, led launches across 14 states.\\\\\nManagement Trainee, Nestle India (2019--2021).\n\\section*{Education}\nMBA (Marketing), IIM Lucknow\n\\end{document}\n"
+    }
+  ]
+}

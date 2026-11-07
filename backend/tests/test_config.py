@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from app.core import checkpointer, config
+from app.core import checkpointer, config, resources
 from app.core.config import Settings
 
 
@@ -116,7 +116,12 @@ def test_database_password_is_not_shown_in_repr(monkeypatch):
 
 def test_each_store_has_its_own_directory():
     s = settings()
-    directories = [s.market_chroma_dir, s.courses_chroma_dir, s.interview_chroma_dir, s.output_dir]
+    directories = [
+        s.market_chroma_dir,
+        s.courses_chroma_dir,
+        s.interview_chroma_dir,
+        s.output_dir,
+    ]
     assert len(set(directories)) == len(directories)
 
 
@@ -142,3 +147,108 @@ def test_a_blank_embedding_model_dir_falls_back_to_the_default(monkeypatch, tmp_
 def test_a_padded_embedding_model_dir_is_trimmed(monkeypatch, tmp_path):
     monkeypatch.setenv("EMBEDDING_MODEL_DIR", f"  {tmp_path / 'baked-model'}  ")
     assert settings().embedding_model_dir == tmp_path / "baked-model"
+
+
+def test_the_default_models_are_the_ones_the_evals_chose():
+    chosen = settings()
+    assert (chosen.llm_model, chosen.llm_reasoning_effort) == (
+        "openai/gpt-oss-120b",
+        "medium",
+    )
+    assert (chosen.resume_llm_model, chosen.resume_llm_reasoning_effort) == (
+        "openai/gpt-oss-20b",
+        "low",
+    )
+
+
+@pytest.mark.parametrize("raw", ["none", "None", " NONE "])
+def test_none_sends_no_reasoning_effort(raw, monkeypatch):
+    monkeypatch.setenv("LLM_REASONING_EFFORT", raw)
+    monkeypatch.setenv("RESUME_LLM_REASONING_EFFORT", raw)
+    chosen = settings()
+    assert (chosen.llm_reasoning_effort, chosen.resume_llm_reasoning_effort) == (
+        None,
+        None,
+    )
+
+
+@pytest.mark.parametrize("raw", ["", "   "])
+@pytest.mark.parametrize(
+    ("field", "default"),
+    [("llm_reasoning_effort", "medium"), ("resume_llm_reasoning_effort", "low")],
+)
+def test_an_empty_or_blank_reasoning_effort_keeps_the_default(raw, field, default, monkeypatch):
+    monkeypatch.setenv(field.upper(), raw)
+    assert getattr(settings(), field) == default
+
+
+@pytest.mark.parametrize("raw", ["", "  "])
+def test_an_empty_or_blank_model_keeps_the_default(raw, monkeypatch):
+    monkeypatch.setenv("LLM_MODEL", raw)
+    monkeypatch.setenv("RESUME_LLM_MODEL", raw)
+    chosen = settings()
+    assert (chosen.llm_model, chosen.resume_llm_model) == (
+        "openai/gpt-oss-120b",
+        "openai/gpt-oss-20b",
+    )
+
+
+def test_a_padded_model_name_is_trimmed(monkeypatch):
+    monkeypatch.setenv("RESUME_LLM_MODEL", " openai/gpt-oss-20b \n")
+    assert settings().resume_llm_model == "openai/gpt-oss-20b"
+
+
+@pytest.mark.parametrize("raw", ["maximum", "minimal", "off", "0"])
+@pytest.mark.parametrize("field", ["llm_reasoning_effort", "resume_llm_reasoning_effort"])
+def test_an_unknown_reasoning_effort_fails_fast_and_names_the_setting(raw, field, monkeypatch):
+    monkeypatch.setenv(field.upper(), raw)
+    with pytest.raises(ValidationError) as error:
+        settings()
+    assert [e["loc"] for e in error.value.errors()] == [(field,)]
+
+
+@pytest.mark.parametrize(
+    ("raw", "effort"), [("High", "high"), (" low", "low"), ("MEDIUM", "medium")]
+)
+def test_reasoning_effort_ignores_case_and_spaces(raw, effort, monkeypatch):
+    monkeypatch.setenv("LLM_REASONING_EFFORT", raw)
+    assert settings().llm_reasoning_effort == effort
+
+
+def test_the_general_llm_uses_the_configured_model_and_effort(monkeypatch):
+    monkeypatch.setenv("LLM_MODEL", "some/model")
+    monkeypatch.setenv("LLM_REASONING_EFFORT", "high")
+    llm = resources.get_llm()
+    assert (llm.model_name, llm.reasoning_effort) == ("some/model", "high")
+
+
+def test_the_resume_llm_uses_its_own_model_effort_and_output_budget(monkeypatch):
+    monkeypatch.setenv("RESUME_LLM_MODEL", "other/model")
+    monkeypatch.setenv("LLM_REASONING_EFFORT", "low")
+    monkeypatch.setenv("RESUME_LLM_REASONING_EFFORT", "high")
+    llm = resources.get_resume_llm()
+    assert (llm.model_name, llm.reasoning_effort) == ("other/model", "high")
+    assert resources.get_llm().reasoning_effort == "low"
+    assert llm.max_tokens == resources.RESUME_MAX_TOKENS
+
+
+def test_none_reaches_both_llms_as_no_effort(monkeypatch):
+    monkeypatch.setenv("LLM_REASONING_EFFORT", "none")
+    monkeypatch.setenv("RESUME_LLM_REASONING_EFFORT", "none")
+    assert resources.get_llm().reasoning_effort is None
+    assert resources.get_resume_llm().reasoning_effort is None
+
+
+def test_both_llms_get_the_key_from_settings_not_the_process_environment(monkeypatch):
+    loaded = config.get_settings()
+    monkeypatch.delenv("GROQ_API_KEY")  # as when the key is only in a dotenv file
+    monkeypatch.setattr(resources, "get_settings", lambda: loaded)
+    for factory in (resources.get_llm, resources.get_resume_llm):
+        assert factory().groq_api_key.get_secret_value() == "test-groq-key"
+
+
+def test_the_general_llm_is_deterministic_and_uncapped_and_the_resume_llm_is_not():
+    general, resume = resources.get_llm(), resources.get_resume_llm()
+    assert general.temperature < 1e-6  # langchain-groq stores 0 as 1e-08
+    assert general.max_tokens is None
+    assert resume.temperature == pytest.approx(0.1)
