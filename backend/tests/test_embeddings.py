@@ -10,7 +10,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from app.core import embeddings
+from app.core import embeddings, resources
 from app.core.embeddings import (
     DOCUMENT_PROMPT,
     QUERY_PROMPT,
@@ -270,3 +270,32 @@ def test_load_verifies_the_files_before_opening_them(monkeypatch, tmp_path):
         ("session", str(tmp_path / embeddings.MODEL_FILE), ["CPUExecutionProvider"]),
         ("tokenizer", str(tmp_path / embeddings.TOKENIZER_FILE)),
     ]
+
+
+def test_the_app_loads_the_model_from_the_configured_dir(monkeypatch, tmp_path):
+    loaded_from = []
+    monkeypatch.setattr(
+        resources.GemmaOnnxEmbeddings,
+        "load",
+        classmethod(lambda cls, path: loaded_from.append(path)),
+    )
+    monkeypatch.setenv("EMBEDDING_MODEL_DIR", str(tmp_path / "baked-model"))
+
+    resources.get_embeddings()
+
+    assert loaded_from == [tmp_path / "baked-model"]
+
+
+def test_the_app_loads_the_model_only_once(monkeypatch):
+    """Loading takes seconds and about 0.8 GB, so every store shares one copy."""
+    loads = []
+    monkeypatch.setattr(
+        resources.GemmaOnnxEmbeddings,
+        "load",
+        classmethod(lambda cls, path: loads.append(path) or object()),
+    )
+
+    first, second = resources.get_embeddings(), resources.get_embeddings()
+
+    assert first is second
+    assert len(loads) == 1

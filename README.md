@@ -4,7 +4,7 @@
 
 The **Agentic AI Career Advisor** is an intelligent system designed to provide end-to-end career support. Powered by **Groq** for high-speed inference and **LangGraph** for stateful multi-agent orchestration, the application deploys a team of specialized AI agents to analyze job markets, craft resumes, and prepare candidates for interviews.
 
-> **Current Status:** The web app (FastAPI + Next.js) is working; Docker deployment is in development.
+> **Current Status:** The web app (FastAPI + Next.js) is working and runs with one `docker compose up`.
 
 ## System Architecture
 
@@ -107,7 +107,37 @@ uv run python -m app.agents.ingestion.seed_interview_db
 
 The course catalog is rebuilt on first use. Cached job postings are scraped again as you search.
 
-## Installation & Setup
+## Quick start with Docker
+
+You need Docker with Compose, a [Groq API key](https://console.groq.com/keys), and about
+4 GB of free RAM.
+
+```bash
+git clone https://github.com/anandn1/career-advisor.git
+cd career-advisor
+cp .env.example .env          # then set GROQ_API_KEY; the other keys are optional
+docker compose up --build
+```
+
+Open http://localhost:3000.
+
+The first start takes a few minutes: the backend creates its tables, loads the resume
+templates and builds the interview question store before it reports healthy, and the web app
+waits for it. Follow along with `docker compose logs -f backend`. Later starts skip this.
+
+What runs:
+
+| Service | What it is |
+| :--- | :--- |
+| `frontend` | Next.js on port 3000, the only port published. It forwards `/api/*` to the backend, so one address serves everything. |
+| `backend` | FastAPI with the agents, the embedding model (built into the image and checked against its fingerprints) and TeX Live for PDF resumes. |
+| `postgres` | Postgres 17 for sessions, runs, resume templates and interview checkpoints. |
+
+Data lives in two Docker volumes, `postgres-data` and `backend-data` (search stores and generated
+files), so it survives restarts. `docker compose down -v` deletes it. To serve the app on another
+port, set `PORT` in your `.env`.
+
+## Local development setup
 
 ### Prerequisites
 

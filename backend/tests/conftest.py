@@ -33,6 +33,7 @@ OPTIONAL_KEYS = (
     "GITHUB_ACCESS_TOKEN",
     "HF_TOKEN",
     "CORS_ORIGINS",
+    "EMBEDDING_MODEL_DIR",
     "DB_URL",
 )
 

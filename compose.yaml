@@ -1,0 +1,60 @@
+# Career Advisor: Postgres + FastAPI backend + Next.js frontend.
+#   docker compose up --build      then open http://localhost:3000
+# Keys come from .env (copy .env.example). The first start builds the search data,
+# which takes a few minutes; `docker compose logs -f backend` shows progress.
+
+name: career-advisor
+
+x-postgres: &postgres
+  POSTGRES_USER: ${POSTGRES_USER:-career}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-career}
+  POSTGRES_DB: ${POSTGRES_DB:-career_advisor}
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment: *postgres
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    env_file:
+      - path: .env
+        required: true
+    environment:
+      # Overrides any DATABASE_URL in .env, which usually points at a local Postgres.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-career}:${POSTGRES_PASSWORD:-career}@postgres:5432/${POSTGRES_DB:-career_advisor}
+    volumes:
+      - backend-data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      # The first start seeds the search data before the API comes up.
+      start_period: 15m
+      start_interval: 5s
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "${PORT:-3000}:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  backend-data:

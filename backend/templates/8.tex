@@ -19,7 +19,6 @@
 % character encoding
 \usepackage[utf8]{inputenc}                       % if you are not using xelatex ou lualatex, replace by the encoding you are using
 %\usepackage{CJKutf8}                              % if you need to use CJK to typeset your resume in Chinese, Japanese or Korean
-\usepackage{fontawesome}
 % adjust the page margins
 \usepackage[scale=0.9]{geometry}
 %\setlength{\hintscolumnwidth}{3cm}                % if you want to change the width of the column with the dates
@@ -29,8 +28,7 @@
 % personal data
 \name{Full}{Name}
 \title{}
-\insti{Indian Institute of Technology Madras (India)}
-%\extrainfo{Placement Registration Number: Y/33/CS/20/067}
+\extrainfo{Indian Institute of Technology Madras (India)}
 \address{vill: Somewhere}{City - 123456}{State, Country}
 % optional, remove / comment the line if not wanted; the "postcode city" and and "country" arguments can be omitted or provided empty
 \phone[mobile]{+91-123456789}                   % optional, remove / comment the line if not wanted
@@ -57,14 +55,7 @@
 }
 \urlstyle{same}
 
-\noindent
-\begin{minipage}{.78\textwidth}
- \makecvtitle
-\end{minipage}%
-\begin{minipage}{.30\textwidth}
-  \centering
-  \includegraphics[height=3cm]{logo.png}
-\end{minipage}
+\makecvtitle
 \vspace{-1em}
 \section{Education}
 \begin{cvcolumns}

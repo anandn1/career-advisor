@@ -5,11 +5,23 @@ from functools import cache
 from pathlib import Path
 from typing import Annotated
 
-from pydantic import AliasChoices, Field, SecretStr, field_validator
+from pydantic import AliasChoices, Field, SecretStr, field_validator, model_validator
+from pydantic_core import PydanticUseDefault
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 REPO_ROOT = BACKEND_DIR.parent
+
+EMBEDDING_MODEL_SUBDIR = Path("models", "embeddinggemma-300m-onnx")  # inside data_dir
+
+
+def _trimmed_or_default(value):
+    """A string without surrounding spaces; blank, like empty, means unset."""
+    if not isinstance(value, str):
+        return value
+    if not value.strip():
+        raise PydanticUseDefault
+    return value.strip()
 
 
 class Settings(BaseSettings):
@@ -33,6 +45,8 @@ class Settings(BaseSettings):
     github_access_token: SecretStr | None = None
 
     data_dir: Path = BACKEND_DIR / "data"
+    # Defaults to <data_dir>/models/...; the Docker image points it at the model baked in.
+    embedding_model_dir: Path | None = None
     session_ttl_days: int = Field(30, gt=0)
     max_upload_bytes: int = Field(5 * 1024 * 1024, gt=0)
     run_workers: int = Field(4, gt=0)
@@ -45,6 +59,18 @@ class Settings(BaseSettings):
         if url.startswith("postgres://"):
             return "postgresql://" + url.removeprefix("postgres://")
         return url
+
+    @model_validator(mode="after")
+    def _default_embedding_model_dir(self) -> "Settings":
+        if self.embedding_model_dir is None:
+            self.embedding_model_dir = self.data_dir / EMBEDDING_MODEL_SUBDIR
+        return self
+
+    @field_validator("embedding_model_dir", mode="before")
+    @classmethod
+    def _trim_path(cls, value):
+        """A blank path would be read as a folder named by its spaces."""
+        return _trimmed_or_default(value)
 
     @field_validator("cors_origins", mode="before")
     @classmethod
@@ -67,10 +93,6 @@ class Settings(BaseSettings):
     @property
     def interview_chroma_dir(self) -> Path:
         return self.data_dir / "chroma_interview"
-
-    @property
-    def embedding_model_dir(self) -> Path:
-        return self.data_dir / "models" / "embeddinggemma-300m-onnx"
 
     @property
     def output_dir(self) -> Path:

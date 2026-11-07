@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from app.core import checkpointer
+from app.core import checkpointer, config
 from app.core.config import Settings
 
 
@@ -118,3 +118,27 @@ def test_each_store_has_its_own_directory():
     s = settings()
     directories = [s.market_chroma_dir, s.courses_chroma_dir, s.interview_chroma_dir, s.output_dir]
     assert len(set(directories)) == len(directories)
+
+
+def test_embedding_model_lives_under_data_dir_by_default(monkeypatch, tmp_path):
+    """The folder name is spelled out: renaming it would orphan models already downloaded."""
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    assert settings().embedding_model_dir == tmp_path / "models" / "embeddinggemma-300m-onnx"
+
+
+def test_embedding_model_dir_can_point_outside_data_dir(monkeypatch, tmp_path):
+    monkeypatch.setenv("DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("EMBEDDING_MODEL_DIR", str(tmp_path / "baked-model"))
+    assert settings().embedding_model_dir == tmp_path / "baked-model"
+
+
+@pytest.mark.parametrize("blank", ["", "   "], ids=["empty", "spaces"])
+def test_a_blank_embedding_model_dir_falls_back_to_the_default(monkeypatch, tmp_path, blank):
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("EMBEDDING_MODEL_DIR", blank)
+    assert settings().embedding_model_dir == tmp_path / config.EMBEDDING_MODEL_SUBDIR
+
+
+def test_a_padded_embedding_model_dir_is_trimmed(monkeypatch, tmp_path):
+    monkeypatch.setenv("EMBEDDING_MODEL_DIR", f"  {tmp_path / 'baked-model'}  ")
+    assert settings().embedding_model_dir == tmp_path / "baked-model"
