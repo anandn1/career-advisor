@@ -12,6 +12,8 @@ One real run through every agent, with a fictional candidate (Asha Rao, a backen
 in Bengaluru): skills from her resume, the job market, a learning path, a resume and its
 review, a mock interview and the report. Click a screenshot for the full page.
 
+https://github.com/user-attachments/assets/c470269c-aee3-47ef-9ca6-11b10789c66c
+
 <table>
 <tr><td width="50%"><a href="docs/screenshots/01-start.png"><img src="docs/screenshots/01-start.png" alt="Start: role, place and a resume"></a><br>Start: role, place and a resume</td><td width="50%"><a href="docs/screenshots/02-skills.png"><img src="docs/screenshots/02-skills.png" alt="Skills read from the resume"></a><br>Skills read from the resume</td></tr>
 <tr><td width="50%"><a href="docs/screenshots/03-market.png"><img src="docs/screenshots/03-market.png" alt="Live LinkedIn postings and skill gaps"></a><br>Live LinkedIn postings and skill gaps</td><td width="50%"><a href="docs/screenshots/04-learning-path.png"><img src="docs/screenshots/04-learning-path.png" alt="Courses for the gaps"></a><br>Courses for the gaps</td></tr>
