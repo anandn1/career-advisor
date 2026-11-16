@@ -1,0 +1,221 @@
+{
+  "about": "Interview coach. 'grading': answers written to a known quality; a model's grade is scored exactly and within one step (bad < moderate < good < excellent). 'follow_up_decision': cases the router sees (only bad or moderate grades reach it) with the clearly right choice; a bad answer on the right track (one key mistake) gets a follow-up, a plainly wrong one does not. Cases the app decides by itself (no answer, or 'I don't know') are run but not scored. 'follow_up_questions' and 'summaries' are scored by the judge.",
+  "grading": [
+    {
+      "id": "deadlock-excellent",
+      "question": "What is a deadlock?",
+      "grade": "excellent",
+      "answer": "A deadlock is when a set of threads or processes each hold a resource and wait for one held by another, so none can proceed. It needs all four Coffman conditions: mutual exclusion, hold and wait, no preemption and circular wait. You prevent it by breaking one of them, most practically circular wait by always acquiring locks in a global order. Alternatives are avoidance, like the Banker's algorithm, which only grants requests that keep the system in a safe state, or detection: build a wait-for graph, find cycles and kill or roll back a victim. In practice I also use lock timeouts like tryLock so a thread backs off instead of waiting forever."
+    },
+    {
+      "id": "deadlock-bad",
+      "question": "What is a deadlock?",
+      "grade": "bad",
+      "answer": "Deadlock is when the computer becomes very slow because too many programs are running at the same time."
+    },
+    {
+      "id": "tcp-udp-good",
+      "question": "TCP vs UDP: Major differences.",
+      "grade": "good",
+      "answer": "TCP is connection-oriented: it does a three-way handshake, guarantees delivery and ordering with sequence numbers and retransmission, and has flow and congestion control. UDP is connectionless and just sends datagrams with no guarantees, so it has less overhead and lower latency. TCP suits web pages, file transfer and email; UDP suits DNS lookups, video calls and games where a late packet is useless anyway."
+    },
+    {
+      "id": "tcp-udp-moderate",
+      "question": "TCP vs UDP: Major differences.",
+      "grade": "moderate",
+      "answer": "TCP is reliable and UDP is faster. TCP is used for websites and UDP for streaming."
+    },
+    {
+      "id": "lru-excellent",
+      "question": "Implement LRU Cache.",
+      "grade": "excellent",
+      "answer": "I'd combine a hash map with a doubly linked list. The map goes from key to list node, and the list keeps nodes in recency order with the most recent at the head. get looks the key up in O(1), moves the node to the head and returns the value. put updates and moves an existing node, or inserts a new one at the head; if that exceeds capacity, it removes the tail node and deletes its key from the map. Both operations are O(1) time and the structure is O(capacity) space. Sentinel head and tail nodes avoid null checks. In Python, OrderedDict with move_to_end and popitem(last=False) gives the same thing, and for concurrent use I'd guard both operations with one lock."
+    },
+    {
+      "id": "lru-moderate",
+      "question": "Implement LRU Cache.",
+      "grade": "moderate",
+      "answer": "I would keep the items in a list. When an item is used I move it to the front, and when the cache is full I remove the last item in the list."
+    },
+    {
+      "id": "indexing-good",
+      "question": "Explain indexing and its impact.",
+      "grade": "good",
+      "answer": "An index is a separate data structure, usually a B-tree, that keeps column values sorted with pointers to the rows, so lookups and range queries avoid a full table scan. The cost is extra storage and slower writes, because every insert, update and delete must also update each index. Composite indexes help queries that filter on the leading columns, and indexes on low-selectivity columns like a boolean rarely help."
+    },
+    {
+      "id": "indexing-bad",
+      "question": "Explain indexing and its impact.",
+      "grade": "bad",
+      "answer": "Indexing means numbering the rows of the table so you know the row number of each record."
+    },
+    {
+      "id": "url-shortener-excellent",
+      "question": "Design a URL shortener like TinyURL.",
+      "grade": "excellent",
+      "answer": "Requirements first: create a short link, redirect fast, links rarely change, reads outnumber writes about 100 to 1. Say 100M new links a month, so around 40 writes a second and 4,000 reads a second, and about 6 TB over five years. For IDs I'd take a unique 64-bit number from a distributed counter, such as ranges handed out to each app server, and base62-encode it, so 7 characters cover trillions of links with no collisions; hashing the URL would need collision checks. Storage is a key-value store like DynamoDB or Cassandra keyed by the short code, sharded by that key. Reads go through a Redis cache with LRU eviction, since popular links are hot. The redirect is a 302 if we want click analytics, otherwise a 301 that browsers cache; clicks go to Kafka for asynchronous analytics. Custom aliases need a uniqueness check, expiring links need a TTL, and rate limiting on creation stops abuse."
+    },
+    {
+      "id": "url-shortener-moderate",
+      "question": "Design a URL shortener like TinyURL.",
+      "grade": "moderate",
+      "answer": "I would generate a random string for each URL, save the mapping in a database and redirect users when they open the short link."
+    },
+    {
+      "id": "authn-authz-good",
+      "question": "What is authentication vs. authorization?",
+      "grade": "good",
+      "answer": "Authentication checks who you are, for example with a password, a one-time code or a signed token. Authorization decides what an authenticated user may do, for example through roles or per-resource permissions. Authentication happens first. In HTTP terms, a 401 means you are not authenticated and a 403 means you are authenticated but not allowed."
+    },
+    {
+      "id": "authn-authz-bad",
+      "question": "What is authentication vs. authorization?",
+      "grade": "bad",
+      "answer": "They are the same thing, both just mean logging in to the website."
+    },
+    {
+      "id": "oauth-excellent",
+      "question": "How does OAuth2 work? What problem does it solve?",
+      "grade": "excellent",
+      "answer": "OAuth2 solves delegated authorization: letting an app act on your behalf at another service without giving it your password. There are four roles: the resource owner (you), the client app, the authorization server and the resource server. In the authorization code flow with PKCE, the client redirects you to the authorization server with the scopes it wants and a code challenge; you log in and consent; the server redirects back with a short-lived code; the client exchanges the code plus its code verifier for an access token and usually a refresh token. The client sends the access token to the resource server, which checks its signature or introspects it and enforces the scopes. Access tokens are short-lived and refresh tokens get new ones. OAuth2 itself is about authorization; OpenID Connect adds an ID token on top for authentication."
+    },
+    {
+      "id": "oauth-moderate",
+      "question": "How does OAuth2 work? What problem does it solve?",
+      "grade": "moderate",
+      "answer": "OAuth lets you log in to apps with your Google account. Google gives the app a token so it can access your account."
+    },
+    {
+      "id": "pair-sum-good",
+      "question": "Find a pair with a given sum in an array.",
+      "grade": "good",
+      "answer": "Go through the array once with a hash set of values seen so far. For each number x, if target minus x is in the set, return the pair; otherwise add x. That is O(n) time and O(n) space. If the array is sorted, or extra memory matters, sort it and move two pointers in from both ends, which is O(n log n) time and O(1) extra space. I'd also handle no pair found and decide whether the same element may be used twice."
+    },
+    {
+      "id": "pair-sum-bad",
+      "question": "Find a pair with a given sum in an array.",
+      "grade": "bad",
+      "answer": "I don't know."
+    }
+  ],
+  "follow_up_decision": [
+    {
+      "id": "url-shortener-moderate",
+      "grade": "moderate",
+      "expected": "FOLLOW_UP"
+    },
+    {
+      "id": "oauth-moderate",
+      "grade": "moderate",
+      "expected": "FOLLOW_UP"
+    },
+    {
+      "id": "lru-moderate",
+      "grade": "moderate",
+      "expected": "FOLLOW_UP"
+    },
+    {
+      "id": "tcp-udp-moderate",
+      "grade": "moderate",
+      "expected": "FOLLOW_UP"
+    },
+    {
+      "id": "pair-sum-bad",
+      "grade": "bad",
+      "expected": "NEW_QUESTION"
+    },
+    {
+      "id": "empty-answer",
+      "grade": "bad",
+      "expected": "NEW_QUESTION",
+      "question": "Explain memory management and paging.",
+      "answer": ""
+    },
+    {
+      "id": "skip-request",
+      "grade": "bad",
+      "expected": "NEW_QUESTION",
+      "question": "Describe transaction isolation levels.",
+      "answer": "Can we skip this one? I haven't studied it."
+    },
+    {
+      "id": "asks-for-the-answer",
+      "grade": "bad",
+      "expected": "NEW_QUESTION",
+      "question": "What is a thread? How is it different from a process?",
+      "answer": "No idea, honestly. Can you just tell me the answer and move on?"
+    },
+    {
+      "id": "binary-search-wrong",
+      "grade": "bad",
+      "expected": "NEW_QUESTION",
+      "question": "What is the time complexity of binary search, and why?",
+      "answer": "It is O(n squared), because it compares every pair of elements to find the target."
+    },
+    {
+      "id": "rest-wrong",
+      "grade": "bad",
+      "expected": "NEW_QUESTION",
+      "question": "What makes an API RESTful?",
+      "answer": "REST means the server rests between requests to save CPU, so you add sleep calls to each endpoint."
+    },
+    {
+      "id": "deadlock-wrong",
+      "grade": "bad",
+      "expected": "NEW_QUESTION",
+      "question": "What is a deadlock?",
+      "answer": "A deadlock is when the database deletes locked rows so that it can free up memory."
+    },
+    {
+      "id": "hash-map-wrong",
+      "grade": "bad",
+      "expected": "NEW_QUESTION",
+      "question": "How does a hash map find the value for a key?",
+      "answer": "It sorts all the keys alphabetically, then reads them one by one from the start until it reaches the key."
+    },
+    {
+      "id": "index-salvageable",
+      "grade": "bad",
+      "expected": "FOLLOW_UP",
+      "question": "What does a database index do?",
+      "answer": "It is a B-tree that keeps the table's rows sorted, so every insert and update gets faster."
+    },
+    {
+      "id": "lru-salvageable",
+      "grade": "bad",
+      "expected": "FOLLOW_UP",
+      "question": "How does an LRU cache decide what to evict?",
+      "answer": "It evicts the item that was added first, using a queue of insert times."
+    },
+    {
+      "id": "dns-wrong",
+      "grade": "bad",
+      "expected": "NEW_QUESTION",
+      "question": "What does DNS do?",
+      "answer": "DNS encrypts web pages so that hackers cannot read them."
+    },
+    {
+      "id": "garbage-collection-wrong",
+      "grade": "bad",
+      "expected": "NEW_QUESTION",
+      "question": "What is garbage collection?",
+      "answer": "It is when the operating system empties the recycle bin every night."
+    }
+  ],
+  "follow_up_questions": [
+    "url-shortener-moderate",
+    "oauth-moderate",
+    "lru-moderate",
+    "tcp-udp-moderate"
+  ],
+  "summaries": [
+    {
+      "id": "mixed-session",
+      "report": "- operating systems: excellent | Covered all four Coffman conditions and prevention by lock ordering.\n- networking: moderate | Knew TCP is reliable but could not explain how (no handshake, sequencing or congestion control).\n- databases: bad | Confused indexing with row numbering.\n- system design: good | Sensible URL shortener with caching; missed capacity estimates."
+    },
+    {
+      "id": "strong-session",
+      "report": "- data structures: excellent | O(1) LRU cache with hash map and doubly linked list, including concurrency.\n- security: excellent | Clear OAuth2 authorization code flow with PKCE and the OIDC distinction.\n- algorithms: good | Hash-set pair sum in O(n); mentioned the two-pointer alternative."
+    }
+  ]
+}

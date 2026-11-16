@@ -1,166 +1,175 @@
-"""
-Prisma Models Usage Examples for Career Advisor
+"""Database tables."""
 
-With Prisma, models are auto-generated from schema.prisma.
-This file contains usage examples and helper functions.
-"""
+import enum
+import uuid
+from datetime import UTC, datetime
 
-from typing import Optional, List
-from prisma import Prisma
-from .database import prisma
+from sqlalchemy import (
+    JSON,
+    Column,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Index,
+    LargeBinary,
+    String,
+    Table,
+    Text,
+    func,
+    text,
+)
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
-
-# ============================================
-# Resume Template Operations
-# ============================================
-
-async def create_resume_template(
-    name: str,
-    latex_src: str,
-    description: Optional[str] = None,
-    preview_image: Optional[str] = None,
-    category: Optional[str] = None,
-    difficulty_level: Optional[str] = None,
-    industry: Optional[str] = None,
-    tag_ids: Optional[List[int]] = None,
-):
-    """Create a new resume template with optional tags"""
-    tag_connections = [{"id": tag_id} for tag_id in tag_ids] if tag_ids else []
-    
-    template = await prisma.resumetemplate.create(
-        data={
-            "name": name,
-            "latexSrc": latex_src,
-            "description": description,
-            "previewImage": preview_image,
-            "category": category,
-            "difficultyLevel": difficulty_level,
-            "industry": industry,
-            "tags": {"connect": tag_connections} if tag_connections else None,
-        },
-        include={"tags": True}
-    )
-    return template
+JsonColumn = JSON().with_variant(JSONB(), "postgresql")
 
 
-async def get_template_by_id(template_id: int):
-    """Get a resume template by ID with its tags"""
-    return await prisma.resumetemplate.find_unique(
-        where={"id": template_id},
-        include={"tags": True}
-    )
+class Base(DeclarativeBase):
+    pass
 
 
-async def get_templates_by_tag(tag_name: str):
-    """Get all templates with a specific tag"""
-    return await prisma.resumetemplate.find_many(
-        where={
-            "tags": {
-                "some": {"name": tag_name}
-            }
-        },
-        include={"tags": True}
+def _new_id() -> str:
+    return str(uuid.uuid4())
+
+
+def utcnow() -> datetime:
+    return datetime.now(UTC)
+
+
+template_tags = Table(
+    "resume_template_tags",
+    Base.metadata,
+    Column(
+        "template_id",
+        ForeignKey("resume_templates.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column("tag_id", ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True),
+)
+
+
+class Tag(Base):
+    __tablename__ = "tags"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
+    name: Mapped[str] = mapped_column(String(100), unique=True)
+
+    templates: Mapped[list["ResumeTemplate"]] = relationship(
+        secondary=template_tags, back_populates="tags"
     )
 
 
-async def get_templates_by_category(category: str):
-    """Get templates by category"""
-    return await prisma.resumetemplate.find_many(
-        where={"category": category},
-        include={"tags": True},
-        order={"downloadCount": "desc"}
+class ResumeTemplate(Base):
+    """A reference LaTeX resume whose style generated resumes follow."""
+
+    __tablename__ = "resume_templates"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
+    name: Mapped[str] = mapped_column(String(255), unique=True)
+    latex_src: Mapped[str] = mapped_column(Text)
+    preview_image: Mapped[str | None] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    tags: Mapped[list[Tag]] = relationship(
+        secondary=template_tags, back_populates="templates", lazy="selectin"
     )
 
 
-async def update_template_downloads(template_id: int):
-    """Increment template download count"""
-    return await prisma.resumetemplate.update(
-        where={"id": template_id},
-        data={"downloadCount": {"increment": 1}}
+class RunKind(enum.StrEnum):
+    SKILLS_FROM_RESUME = "skills_from_resume"
+    SKILLS_FROM_GITHUB = "skills_from_github"
+    JOB_MARKET = "job_market"
+    LEARNING_PATH = "learning_path"
+    RESUME = "resume"
+    RESUME_RENDER = "resume_render"
+    RESUME_REVIEW = "resume_review"
+    INTERVIEW = "interview"
+
+
+class RunStatus(enum.StrEnum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+    @property
+    def is_finished(self) -> bool:
+        return self in (RunStatus.SUCCEEDED, RunStatus.FAILED)
+
+
+class CareerSession(Base):
+    """An anonymous user's workspace, identified only by its unguessable id."""
+
+    __tablename__ = "sessions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, index=True
+    )
+    target_role: Mapped[str] = mapped_column(String(200))
+    location: Mapped[str] = mapped_column(String(200))
+    github_username: Mapped[str | None] = mapped_column(String(39))
+    skills: Mapped[list] = mapped_column(JsonColumn, default=list)
+
+    runs: Mapped[list["AgentRun"]] = relationship(
+        back_populates="session", cascade="all, delete-orphan", passive_deletes=True
     )
 
 
-# ============================================
-# Tag Operations
-# ============================================
+# Statuses are stored by name; interviews may legitimately run side by side.
+UNFINISHED_BACKGROUND_RUN = text("status IN ('QUEUED', 'RUNNING') AND kind != 'INTERVIEW'")
 
-async def create_tag(name: str, color: Optional[str] = None):
-    """Create a new tag"""
-    return await prisma.tag.create(
-        data={"name": name, "color": color}
+
+class AgentRun(Base):
+    """One run of an agent for a session; interviews use the LangGraph thread id as id."""
+
+    __tablename__ = "agent_runs"
+    __table_args__ = (
+        # At most one unfinished background run per kind per session, even under races.
+        Index(
+            "uq_agent_runs_one_unfinished_per_kind",
+            "session_id",
+            "kind",
+            unique=True,
+            postgresql_where=UNFINISHED_BACKGROUND_RUN,
+            sqlite_where=UNFINISHED_BACKGROUND_RUN,
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
+    session_id: Mapped[str] = mapped_column(
+        ForeignKey("sessions.id", ondelete="CASCADE"), index=True
+    )
+    kind: Mapped[RunKind] = mapped_column(Enum(RunKind, native_enum=False, length=40))
+    status: Mapped[RunStatus] = mapped_column(
+        Enum(RunStatus, native_enum=False, length=20), default=RunStatus.QUEUED
+    )
+    input: Mapped[dict] = mapped_column(JsonColumn, default=dict)
+    result: Mapped[dict | None] = mapped_column(JsonColumn)
+    error: Mapped[str | None] = mapped_column(Text)
+    # Progress events, in order: [{"step": "...", "detail": {...}, "at": "..."}].
+    events: Mapped[list] = mapped_column(JsonColumn, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    session: Mapped[CareerSession] = relationship(back_populates="runs")
+    resume_file: Mapped["ResumeFile | None"] = relationship(
+        cascade="all, delete-orphan", passive_deletes=True
     )
 
 
-async def get_all_tags():
-    """Get all tags with template count"""
-    return await prisma.tag.find_many(
-        include={"templates": True}
+class ResumeFile(Base):
+    """The LaTeX source and compiled PDF produced by a resume run."""
+
+    __tablename__ = "resume_files"
+
+    run_id: Mapped[str] = mapped_column(
+        ForeignKey("agent_runs.id", ondelete="CASCADE"), primary_key=True
     )
-
-
-# ============================================
-# User Operations
-# ============================================
-
-async def create_user(
-    email: str,
-    full_name: str,
-    hashed_password: str,
-    current_role: Optional[str] = None,
-):
-    """Create a new user"""
-    return await prisma.user.create(
-        data={
-            "email": email,
-            "fullName": full_name,
-            "hashedPassword": hashed_password,
-            "currentRole": current_role,
-        }
-    )
-
-
-async def get_user_by_email(email: str):
-    """Get user by email"""
-    return await prisma.user.find_unique(
-        where={"email": email},
-        include={"skills": True, "assessments": True}
-    )
-
-
-async def add_skill_to_user(user_id: int, skill_id: int):
-    """Add a skill to a user"""
-    return await prisma.user.update(
-        where={"id": user_id},
-        data={"skills": {"connect": [{"id": skill_id}]}}
-    )
-
-
-# ============================================
-# Career Recommendation Operations
-# ============================================
-
-async def create_recommendation(
-    user_id: int,
-    career_path_id: int,
-    match_score: float,
-    reasoning: Optional[str] = None,
-):
-    """Create a career recommendation"""
-    return await prisma.careerrecommendation.create(
-        data={
-            "userId": user_id,
-            "careerPathId": career_path_id,
-            "matchScore": match_score,
-            "reasoning": reasoning,
-        },
-        include={"careerPath": True}
-    )
-
-
-async def get_user_recommendations(user_id: int):
-    """Get all recommendations for a user"""
-    return await prisma.careerrecommendation.find_many(
-        where={"userId": user_id},
-        include={"careerPath": True},
-        order={"matchScore": "desc"}
-    )
+    latex: Mapped[str] = mapped_column(Text)
+    pdf: Mapped[bytes | None] = mapped_column(LargeBinary)

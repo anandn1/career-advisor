@@ -19,3 +19,12 @@ report_session_*.txt
 
 # Internal planning docs
 architect-plan.md
+backend/data/
+
+# Claude Code project instructions (kept local)
+CLAUDE.md
+
+# Model eval outputs and the downloaded embedding model they use
+backend/evals/results/
+backend/evals/.cache/
+backend/evals/FINDINGS.md

@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+!.env.example
+
+# Demo recording output (the MP4 is uploaded to GitHub, not committed)
+/recording/output/

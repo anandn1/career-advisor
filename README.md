@@ -4,7 +4,22 @@
 
 The **Agentic AI Career Advisor** is an intelligent system designed to provide end-to-end career support. Powered by **Groq** for high-speed inference and **LangGraph** for stateful multi-agent orchestration, the application deploys a team of specialized AI agents to analyze job markets, craft resumes, and prepare candidates for interviews.
 
-> **Current Status:** This project is currently a **Command Line Interface (CLI)** application. A full web interface (FastAPI + React) is in development.
+> **Current Status:** The web app (FastAPI + Next.js) is working and runs with one `docker compose up`.
+
+## Demo
+
+One real run through every agent, with a fictional candidate (Asha Rao, a backend engineer
+in Bengaluru): skills from her resume, the job market, a learning path, a resume and its
+review, a mock interview and the report. Click a screenshot for the full page.
+
+https://github.com/user-attachments/assets/c470269c-aee3-47ef-9ca6-11b10789c66c
+
+<table>
+<tr><td width="50%"><a href="docs/screenshots/01-start.png"><img src="docs/screenshots/01-start.png" alt="Start: role, place and a resume"></a><br>Start: role, place and a resume</td><td width="50%"><a href="docs/screenshots/02-skills.png"><img src="docs/screenshots/02-skills.png" alt="Skills read from the resume"></a><br>Skills read from the resume</td></tr>
+<tr><td width="50%"><a href="docs/screenshots/03-market.png"><img src="docs/screenshots/03-market.png" alt="Live LinkedIn postings and skill gaps"></a><br>Live LinkedIn postings and skill gaps</td><td width="50%"><a href="docs/screenshots/04-learning-path.png"><img src="docs/screenshots/04-learning-path.png" alt="Courses for the gaps"></a><br>Courses for the gaps</td></tr>
+<tr><td width="50%"><a href="docs/screenshots/05-resume.png"><img src="docs/screenshots/05-resume.png" alt="A resume written for the role, as PDF"></a><br>A resume written for the role, as PDF</td><td width="50%"><a href="docs/screenshots/06-resume-review.png"><img src="docs/screenshots/06-resume-review.png" alt="Review of an existing resume"></a><br>Review of an existing resume</td></tr>
+<tr><td width="50%"><a href="docs/screenshots/07-interview.png"><img src="docs/screenshots/07-interview.png" alt="Mock interview with feedback"></a><br>Mock interview with feedback</td><td width="50%"><a href="docs/screenshots/08-report.png"><img src="docs/screenshots/08-report.png" alt="The report"></a><br>The report</td></tr>
+</table>
 
 ## System Architecture
 
@@ -33,91 +48,227 @@ graph TD
 ## Tech Stack
 
   * **Orchestration:** LangGraph (Stateful multi-agent workflows)
-  * **LLM Engine:** Groq (Llama 3 / Mixtral for near-instant inference)
-  * **Embeddings:** Google EmbeddingGemma 300M (Running locally via SentenceTransformers)
+  * **LLM Engine:** Groq: gpt-oss-120b for the agents, gpt-oss-20b for resume writing (see [Language models](#language-models))
+  * **Embeddings:** Google EmbeddingGemma 300M, 4-bit ONNX, run locally on the CPU (see [Embedding model](#embedding-model))
   * **Framework:** Python, LangChain
-  * **Database:** PostgreSQL (with SQLAlchemy)
+  * **Database:** PostgreSQL (SQLAlchemy + Alembic; LangGraph checkpoints)
   * **Vector Store:** ChromaDB (for RAG capabilities)
 
-## Installation & Setup
+## Language models
 
-### Prerequisites
+The agents run on Groq. Which model does which job was decided by evals on the app's own
+tasks: 12 tasks, one per place an agent calls a model, scored against hand-checked labels and,
+for open-ended text, by a separate Gemini judge. The method, results and limits are in
+[backend/evals/README.md](backend/evals/README.md).
 
-  * Python 3.10+
-  * PostgreSQL installed and running
-  * A Groq API Key
+| Used for | Model | Why |
+| :--- | :--- | :--- |
+| Every agent except resume writing | `openai/gpt-oss-120b`, medium reasoning | Graded interview answers 0.88 against 0.72 for 20b, chose follow-ups best (21/24), parsed every course search correctly |
+| Resume draft and LaTeX | `openai/gpt-oss-20b`, low reasoning | As good as 120b on resumes at half the price; 120b at medium skipped the required tool call on most drafts |
 
-### 1\. Clone the Repository
+Both can be changed with `LLM_MODEL`, `RESUME_LLM_MODEL` and their `*_REASONING_EFFORT`
+settings (see `.env.example`).
+
+## Embedding model
+
+Job postings, courses and interview questions are found by meaning, not keywords, using
+[EmbeddingGemma 300M](https://huggingface.co/google/embeddinggemma-300m) from Google. It runs on
+your own CPU, so searches cost nothing, need no API key and send no data anywhere.
+
+The app uses the 4-bit [ONNX build](https://huggingface.co/onnx-community/embeddinggemma-300m-ONNX)
+through ONNX Runtime, without PyTorch. That keeps the backend image around 2.6 GB instead of
+about 4.6 GB, and the model needs no Hugging Face token. The full 768 dimensions are kept.
+
+### How it was chosen
+
+Candidate models were scored on the app's own data (457 job postings, 578 interview questions
+and 23 courses) with 46 searches phrased the way the agents search. The score is nDCG, from 0 to
+1: how close the top results come to the ideal order, averaged over the three tasks.
+
+| Model | Dimensions | Score |
+| :--- | ---: | ---: |
+| EmbeddingGemma, full precision | 768 | 0.860 |
+| **EmbeddingGemma, 4-bit ONNX (used)** | 768 | **0.858** |
+| EmbeddingGemma, 8-bit ONNX | 768 | 0.855 |
+| EmbeddingGemma, full precision | 512 | 0.847 |
+| EmbeddingGemma, full precision | 256 | 0.816 |
+| BGE base v1.5 | 768 | 0.814 |
+| BGE small v1.5 | 384 | 0.781 |
+| EmbeddingGemma without its task prompts | 768 | 0.764 |
+| all-MiniLM-L6-v2 | 384 | 0.761 |
+| Snowflake Arctic Embed M v1.5 | 768 | 0.711 |
+
+Two findings shaped the setup:
+
+* **Task prompts matter.** EmbeddingGemma expects queries to start with
+  `task: search result | query: ` and documents with `title: none | text: `. Without them it
+  scored 0.764 instead of 0.860; the app adds both.
+* **4-bit costs no search quality here.** It scored the same as full precision while using
+  about a sixth of the disk space. Its vectors are 0.97 cosine-similar to the full-precision
+  ones on average (two unrelated texts score about 0.60).
+
+### Safety
+
+The ONNX conversion is published by the Hugging Face community organisation, not by Google, so
+the app does not trust it blindly:
+
+* It downloads one fixed commit (`5090578d`), so later changes to the repository never reach you.
+* Before loading, it checks every file against a SHA-256 fingerprint stored in
+  `backend/app/core/embeddings.py`. A file that does not match is deleted and the app stops with
+  an error instead of running it.
+* The pinned files were compared with Google's original model on all 1,104 test texts. Every
+  vector pointed the same way as the original's, with no outliers.
+
+### Resources
+
+Loading the model takes about 0.5 GB of RAM; embedding long job postings peaks at about 0.8 GB
+for the whole process. It embeds about 7 job postings a second on a laptop CPU.
+
+### Upgrading from an older version
+
+Earlier versions built the vector stores with a different setup of the model, and the old and
+new vectors cannot be mixed. Delete the old stores once and seed again:
+
+```bash
+cd backend
+rm -rf data/chroma_market data/chroma_courses data/chroma_interview
+uv run python -m app.agents.ingestion.seed_interview_db
+```
+
+The course catalog is rebuilt on first use. Cached job postings are scraped again as you search.
+
+## Quick start with Docker
+
+You need Docker with Compose, a [Groq API key](https://console.groq.com/keys), and about
+4 GB of free RAM.
 
 ```bash
 git clone https://github.com/anandn1/career-advisor.git
 cd career-advisor
+cp .env.example .env          # then set GROQ_API_KEY; the other keys are optional
+docker compose up --build
 ```
 
-### 2\. Create Virtual Environment
+Open http://localhost:3000.
+
+The first start takes a few minutes: the backend creates its tables, loads the resume
+templates and builds the interview question store before it reports healthy, and the web app
+waits for it. Follow along with `docker compose logs -f backend`. Later starts skip this.
+
+What runs:
+
+| Service | What it is |
+| :--- | :--- |
+| `frontend` | Next.js on port 3000, the only port published. It forwards `/api/*` to the backend, so one address serves everything. |
+| `backend` | FastAPI with the agents, the embedding model (built into the image and checked against its fingerprints) and TeX Live for PDF resumes. |
+| `postgres` | Postgres 17 for sessions, runs, resume templates and interview checkpoints. |
+
+Data lives in two Docker volumes, `postgres-data` and `backend-data` (search stores and generated
+files), so it survives restarts. `docker compose down -v` deletes it. To serve the app on another
+port, set `PORT` in your `.env`.
+
+## Local development setup
+
+### Prerequisites
+
+  * [uv](https://docs.astral.sh/uv/) (installs Python 3.12 for you)
+  * PostgreSQL
+  * A Groq API key
+  * Optional: Cohere (reranking), Tavily (course search) and GitHub (rate limits) keys
+  * Optional: TeX Live (`pdflatex`) to compile resumes to PDF; without it you get the `.tex` file
+
+### 1. Clone and install
 
 ```bash
-python -m venv venv
-
-# On Linux/Mac:
-source venv/bin/activate
-
-# On Windows:
-# venv\Scripts\activate
+git clone https://github.com/anandn1/career-advisor.git
+cd career-advisor/backend
+uv sync
 ```
 
-### 3\. Install Dependencies
+The first search downloads the embedding model (about 200 MB) into `backend/data/models/`.
+
+### 2. Configure
+
+Copy `.env.example` to `.env` in the repository root and fill in at least `GROQ_API_KEY` and `DATABASE_URL`.
+
+### 3. Prepare the databases (from `backend/`)
 
 ```bash
-pip install -r backend/requirements.txt
-```
-
-> **Note:** This will install `sentence-transformers` and `langchain-huggingface`. The first run may take a moment to download the EmbeddingGemma model weights (approx. 300MB).
-
-### 4\. Environment Configuration
-
-Create a `.env` file in the `backend/` directory:
-
-```env
-GROQ_API_KEY=gsk_your_groq_key_here
-DATABASE_URL=postgresql://user:password@localhost:5432/career_db
-# Note: No API key needed for Embeddings as they run locally.
+uv run alembic upgrade head                              # Postgres tables
+uv run python -m app.db.seed_templates                   # resume templates
+uv run python -m app.agents.ingestion.seed_interview_db  # interview question store
 ```
 
 ## Usage
 
-To start the CLI application, execute the Supervisor Agent module from the root directory.
+### Web app
+
+Start the API from `backend/`:
 
 ```bash
-python -m backend.app.agents.supervisor_agent
+uv run uvicorn app.main:create_app --factory --reload   # http://localhost:8000 (docs at /docs)
 ```
 
-**How to interact:**
+Then start the frontend from `frontend/` (Node 22 and pnpm):
 
-1.  The Supervisor will initialize and request your **Target Job Role**.
-2.  It will ask for your **Profile Details** (skills, experience, etc.).
-3.  The system will automatically route your request to the **Analyst**, **Strategist**, or **Coach** agents to generate the necessary advice.
+```bash
+cp .env.example .env.local     # NEXT_PUBLIC_API_URL=http://localhost:8000
+pnpm install
+pnpm dev                       # http://localhost:3000
+```
+
+Open http://localhost:3000, enter a target role and location, and add your background from a resume or GitHub. The route bar at the top takes you through the stations: Skills, Market, Learning path, Resume and Interview, ending at the Report. While an agent runs, its steps light up live on a line of stops.
+
+Run only one API process: at startup it marks interrupted runs as failed.
+
+### Terminal
+
+```bash
+cd backend && uv run python -m app.cli
+```
+
+### Recording the demo
+
+With the app running (`docker compose up`), this drives every station with real agents,
+saves the screenshots above to `docs/screenshots/` and writes the video, with long agent
+waits sped up and labelled, to `frontend/recording/output/career-advisor-demo.mp4`:
+
+```bash
+cd frontend && pnpm exec playwright install chromium   # once
+APP_URL=http://localhost:3000 pnpm record
+```
+
+### Tests
+
+```bash
+cd backend && uv run pytest     # backend, offline
+cd frontend && pnpm test        # frontend (Vitest)
+```
 
 ## Project Structure
 
 ```text
-career-advisor/
-├── backend/
-│   ├── app/
-│   │   ├── agents/          # Agent logic (Supervisor, Analyst, Coach, etc.)
-│   │   ├── core/            # Configuration and Utils
-│   │   └── models/          # Database models
-│   ├── requirements.txt
-│   └── .env
-├── notebook/                # Experimental Jupyter notebooks
-└── README.md
+frontend/            # Next.js + TypeScript + Tailwind web app (shadcn/ui, TanStack Query)
+backend/
+├── app/
+│   ├── agents/      # LangGraph agents: skills, job market, curriculum, resume, interview
+│   ├── core/        # settings, shared LLM/embeddings/vector stores, checkpointer
+│   ├── services/    # job scraper, GitHub client, document reading, LaTeX compile
+│   ├── api/         # FastAPI routers and schemas
+│   ├── db/          # SQLAlchemy models, queries, template seeding
+│   ├── main.py      # FastAPI app factory
+│   └── cli.py       # terminal front-end
+├── migrations/      # Alembic migrations
+├── templates/       # reference LaTeX resume templates
+└── pyproject.toml
+docs/                # SRS and architecture diagram
 ```
 
 ## Roadmap
 
   - [x] Core Agentic Workflow (CLI) with LangGraph
   - [x] Integration of Local Embeddings (Gemma 300M)
-  - [ ] Web Interface Development: Migrating to a React Frontend + FastAPI Backend.
+  - [x] Web interface: FastAPI backend + Next.js frontend
   - [ ] Database integration for persistent user history.
   - [ ] Enhanced error handling and retry mechanisms.
 
