@@ -6,6 +6,19 @@ The **Agentic AI Career Advisor** is an intelligent system designed to provide e
 
 > **Current Status:** The web app (FastAPI + Next.js) is working and runs with one `docker compose up`.
 
+## Demo
+
+One real run through every agent, with a fictional candidate (Asha Rao, a backend engineer
+in Bengaluru): skills from her resume, the job market, a learning path, a resume and its
+review, a mock interview and the report. Click a screenshot for the full page.
+
+<table>
+<tr><td width="50%"><a href="docs/screenshots/01-start.png"><img src="docs/screenshots/01-start.png" alt="Start: role, place and a resume"></a><br>Start: role, place and a resume</td><td width="50%"><a href="docs/screenshots/02-skills.png"><img src="docs/screenshots/02-skills.png" alt="Skills read from the resume"></a><br>Skills read from the resume</td></tr>
+<tr><td width="50%"><a href="docs/screenshots/03-market.png"><img src="docs/screenshots/03-market.png" alt="Live LinkedIn postings and skill gaps"></a><br>Live LinkedIn postings and skill gaps</td><td width="50%"><a href="docs/screenshots/04-learning-path.png"><img src="docs/screenshots/04-learning-path.png" alt="Courses for the gaps"></a><br>Courses for the gaps</td></tr>
+<tr><td width="50%"><a href="docs/screenshots/05-resume.png"><img src="docs/screenshots/05-resume.png" alt="A resume written for the role, as PDF"></a><br>A resume written for the role, as PDF</td><td width="50%"><a href="docs/screenshots/06-resume-review.png"><img src="docs/screenshots/06-resume-review.png" alt="Review of an existing resume"></a><br>Review of an existing resume</td></tr>
+<tr><td width="50%"><a href="docs/screenshots/07-interview.png"><img src="docs/screenshots/07-interview.png" alt="Mock interview with feedback"></a><br>Mock interview with feedback</td><td width="50%"><a href="docs/screenshots/08-report.png"><img src="docs/screenshots/08-report.png" alt="The report"></a><br>The report</td></tr>
+</table>
+
 ## System Architecture
 
 The system operates via a supervised graph workflow where a **Supervisor Agent** delegates tasks to specialized sub-agents based on the user's state and needs.
@@ -210,6 +223,17 @@ Run only one API process: at startup it marks interrupted runs as failed.
 
 ```bash
 cd backend && uv run python -m app.cli
+```
+
+### Recording the demo
+
+With the app running (`docker compose up`), this drives every station with real agents,
+saves the screenshots above to `docs/screenshots/` and writes the video, with long agent
+waits sped up and labelled, to `frontend/recording/output/career-advisor-demo.mp4`:
+
+```bash
+cd frontend && pnpm exec playwright install chromium   # once
+APP_URL=http://localhost:3000 pnpm record
 ```
 
 ### Tests
