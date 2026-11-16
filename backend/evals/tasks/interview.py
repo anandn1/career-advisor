@@ -6,7 +6,14 @@ from unittest.mock import patch
 from langchain_core.messages import AIMessage, HumanMessage
 
 from app.agents import interview_coach as coach
-from evals.core import CaseResult, JudgeRequest, Outcome, TaskContext, load_data
+from evals.core import (
+    DECIDED_BY_APP,
+    CaseResult,
+    JudgeRequest,
+    Outcome,
+    TaskContext,
+    load_data,
+)
 
 GRADE_ORDER = ["bad", "moderate", "good", "excellent"]
 NEAR_MISS_SCORE = 0.5
@@ -25,6 +32,16 @@ SUMMARY_CRITERIA = [
 
 def _grading_cases() -> dict[str, dict]:
     return {case["id"]: case for case in load_data("interview")["grading"]}
+
+
+def _decision_source(case: dict) -> dict:
+    """A decision case with its question and answer (from the grading case of the same id)."""
+    return {**_grading_cases().get(case["id"], {}), **case}
+
+
+def decided_by_the_model(case: dict) -> bool:
+    """False for answers the app moves on from by itself, such as "I don't know"."""
+    return not coach.did_not_attempt(_decision_source(case)["answer"], case["grade"])
 
 
 def _state_after_answer(case: dict, grade: str) -> dict:
@@ -96,40 +113,47 @@ class UnreadableDecisionError(RuntimeError):
 
 
 class _RecordingLlm:
-    """Passes calls through to the model and keeps each reply's text."""
+    """Passes calls through to the model, counting them and keeping each reply's text."""
 
     def __init__(self, llm):
         self._llm = llm
+        self.calls = 0
         self.replies: list[str] = []
 
     def invoke(self, *args, **kwargs):
+        self.calls += 1
         reply = self._llm.invoke(*args, **kwargs)
         self.replies.append(str(reply.content))
         return reply
 
 
-def _require_one_decision(replies: list[str]) -> None:
-    """The router reads anything without FOLLOW_UP as NEW_QUESTION, so an empty or echoed
-    reply ("FOLLOW_UP or NEW_QUESTION") would pass cases without deciding anything."""
-    if len(replies) != 1:
-        raise UnreadableDecisionError(f"expected one decision call, saw {len(replies)}")
-    named = [decision for decision in DECISIONS if decision in replies[0].upper()]
+def _require_a_decision(recording: _RecordingLlm) -> None:
+    """The router reads anything without FOLLOW_UP as NEW_QUESTION, so a failed call or an
+    empty or echoed reply ("FOLLOW_UP or NEW_QUESTION") would pass cases without deciding."""
+    if recording.calls != 1 or len(recording.replies) != 1:
+        raise UnreadableDecisionError(
+            f"expected one decision, saw {recording.calls} calls and "
+            f"{len(recording.replies)} replies"
+        )
+    reply = recording.replies[0]
+    named = [decision for decision in DECISIONS if decision in reply.upper()]
     if len(named) != 1:
-        raise UnreadableDecisionError(f"reply names no single decision: {replies[0][:200]!r}")
+        raise UnreadableDecisionError(f"reply names no single decision: {reply[:200]!r}")
 
 
 def follow_up_decision(ctx: TaskContext) -> list[CaseResult]:
-    graded = _grading_cases()
-
     def run(case: dict) -> Outcome:
-        source = {**graded.get(case["id"], {}), **case}
+        source = _decision_source(case)
         recording = _RecordingLlm(coach.get_llm())
         with patch.object(coach, "get_llm", lambda: recording):
             route = coach.decide_action_router(_state_after_answer(source, case["grade"]))
-        _require_one_decision(recording.replies)
         choice = "FOLLOW_UP" if route == "ask_follow_up" else "NEW_QUESTION"
+        details = {"expected": case["expected"], "got": choice}
+        if recording.calls == 0:  # e.g. "I don't know": the app moves on by itself
+            return Outcome(None, False, details, DECIDED_BY_APP)  # details say if it was right
+        _require_a_decision(recording)
         passed = choice == case["expected"]
-        return Outcome(float(passed), passed, {"expected": case["expected"], "got": choice})
+        return Outcome(float(passed), passed, details)
 
     return [
         ctx.run_case("follow_up_decision", case["id"], lambda case=case: run(case))

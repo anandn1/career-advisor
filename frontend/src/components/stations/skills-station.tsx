@@ -68,8 +68,9 @@ function ImportSkills({ sessionId }: { sessionId: string }) {
   const ids = { file: useId(), github: useId() };
   const fromResume = useStartRun(sessionId, () => uploadResume(sessionId, file!, "skills"));
   const fromGithub = useStartRun(sessionId, async () =>
-    unwrap(await api.POST("/api/v1/sessions/{session_id}/runs/skills/github", {
-      params: { path: { session_id: sessionId } }, body: { github_username: github.trim() },
+    unwrap(await api.POST("/api/v1/sessions/{session_id}/runs", {
+      params: { path: { session_id: sessionId } },
+      body: { kind: "skills_from_github", github_username: github.trim() },
     })));
   const error = fromResume.error ?? fromGithub.error;
 

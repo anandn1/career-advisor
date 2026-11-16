@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from statistics import mean
 
-from evals.core import DATA_DIR, RATE_LIMITED, CaseResult
+from evals.core import DATA_DIR, DECIDED_BY_APP, RATE_LIMITED, CaseResult
 from evals.models import PRICES_PER_MILLION, Usage
 
 COST_UNIT = 1000  # cost is shown per 1,000 runs of a case
@@ -75,20 +75,27 @@ def _is_rate_limited(case: CaseResult) -> bool:
     return bool(case.error and case.error.startswith(RATE_LIMITED))
 
 
+def _is_decided_by_app(case: CaseResult) -> bool:
+    return case.error == DECIDED_BY_APP
+
+
 def _cell(cases: list[CaseResult]) -> str:
     scored = [c for c in cases if c.score is not None]
     rate_limited = sum(_is_rate_limited(c) for c in cases)
+    by_app = sum(_is_decided_by_app(c) for c in cases)
     score = _score_range(scored) if scored else "n/a"
     passed = sum(c.passed for c in scored)
     errors = sum(c.error is not None for c in scored)
-    # Cost and time per case that actually ran: refused calls cost nothing and take no time,
-    # so counting them would make a rate-limited model look cheap and fast.
-    ran = [c for c in cases if not _is_rate_limited(c)] or cases
+    # Cost and time per case the model actually ran: refused calls and cases the app decided
+    # cost nothing and take no time, so counting them would make a model look cheap and fast.
+    ran = [c for c in cases if not (_is_rate_limited(c) or _is_decided_by_app(c))] or cases
     costs = [c.cost for c in ran if c.cost is not None]
     cost = f"${mean(costs) * COST_UNIT:.2f}" if costs else "-"
     seconds = mean(c.usage.seconds for c in ran)
-    error_note = (f", {errors} err" if errors else "") + (
-        f", {rate_limited} rate-limited" if rate_limited else ""
+    error_note = (
+        (f", {errors} err" if errors else "")
+        + (f", {rate_limited} rate-limited" if rate_limited else "")
+        + (f", {by_app} decided by the app" if by_app else "")
     )
     return f"{score} ({passed}/{len(scored)}{error_note}) {cost} {seconds:.1f}s"
 
@@ -100,8 +107,8 @@ def summary_table(results: list[CaseResult]) -> str:
     models = list(dict.fromkeys(r.model for r in results))
     lines = [
         "Each cell: mean score [range of per-run means] (passed/scored, errors) "
-        f"cost per {COST_UNIT:,} runs, seconds per case. Unjudged and rate-limited cases are "
-        "left out of the score.",
+        f"cost per {COST_UNIT:,} runs, seconds per case. Unjudged, rate-limited and "
+        "app-decided cases are left out of the score.",
         "",
         "| Task | " + " | ".join(models) + " |",
         "| :--- |" + " :--- |" * len(models),

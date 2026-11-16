@@ -11,8 +11,10 @@ from datetime import timedelta
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import TypeAdapter
 
 from app.api.routers import interviews, runs, sessions, templates
+from app.api.schemas import RunRequest, RunUpload
 from app.core.config import get_settings
 from app.db import career_sessions
 from app.db.session import session_scope
@@ -23,6 +25,7 @@ from app.services.runner import RunExecutor
 logger = logging.getLogger(__name__)
 
 API_PREFIX = "/api/v1"
+SCHEMA_REF = "#/components/schemas/{model}"
 CLEANUP_INTERVAL_SECONDS = 6 * 60 * 60
 RESTART_REASON = "The server restarted while this run was in progress. Please run it again."
 
@@ -71,6 +74,26 @@ async def lifespan(app: FastAPI):
         app.state.runner.shutdown()
 
 
+def _describe_run_bodies(app: FastAPI) -> None:
+    """Add the run request bodies to the API description: POST /runs reads them itself,
+    because it takes JSON or a multipart form, so FastAPI cannot list them."""
+    build = app.openapi
+
+    def openapi() -> dict:
+        if app.openapi_schema:
+            return app.openapi_schema
+        schema = build()
+        components = schema.setdefault("components", {}).setdefault("schemas", {})
+        for name, body in {"RunRequest": RunRequest, "RunUpload": RunUpload}.items():
+            body_schema = TypeAdapter(body).json_schema(ref_template=SCHEMA_REF)
+            for model, model_schema in body_schema.pop("$defs", {}).items():
+                components.setdefault(model, model_schema)
+            components[name] = body_schema
+        return schema
+
+    app.openapi = openapi
+
+
 def create_app() -> FastAPI:
     app = FastAPI(title="Agentic AI Career Advisor API", version="2.0.0", lifespan=lifespan)
     app.add_middleware(
@@ -79,8 +102,15 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    for module in (sessions, runs, interviews, templates):
-        app.include_router(module.router, prefix=API_PREFIX)
+    for router in (
+        sessions.router,
+        runs.router,
+        interviews.router,
+        interviews.topics_router,
+        templates.router,
+    ):
+        app.include_router(router, prefix=API_PREFIX)
+    _describe_run_bodies(app)
 
     @app.get("/health", tags=["health"])
     def health() -> dict:

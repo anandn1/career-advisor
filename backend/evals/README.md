@@ -34,7 +34,7 @@ and parser, with the candidate model swapped in.
 | Skills | `skill_extraction` | 5 | Recall and precision against hand-checked skill lists (accepted spellings, fair extras); pass = nothing missed, at most one extra |
 | Templates | `template_tagging` | 15 | Required and forbidden tags per CV, including 5 non-tech CVs |
 | Interview | `answer_grading` | 16 | Answers written at known quality; exact grade 1, one step off 0.5 |
-| Interview | `follow_up_decision` | 8 | Cases with a clear right choice; the reply must name exactly one decision |
+| Interview | `follow_up_decision` | 16 | Cases with a clear right choice; the reply must name exactly one decision. The 4 non-answers ("I don't know", skip) are decided by the app itself and not scored |
 | Interview | `follow_up_question` | 4 | Judge, plus one question and no praise opener |
 | Interview | `interview_summary` | 2 | Judge: faithful to the report, covers each topic, useful |
 | Curriculum | `curriculum_planner` | 3 | Every skill gap extracted, none invented, plausible level |
@@ -66,6 +66,9 @@ Each case also records tokens (input, output, reasoning), cost at Groq's prices 
   echoed "[bad/moderate/good/excellent]", no clear decision) fail the case.
 - **Quota is not the model's fault.** A rate-limited (HTTP 429) case is left unscored and
   counted separately, unless a real failure happened in it too.
+- **Only the model's own decisions count.** The interview moves on by itself after a
+  non-answer such as "I don't know". Those cases are run but left unscored ("decided by the
+  app"), so a dead model cannot pass them; the floor counts only the cases the model decides.
 - **Reproducible.** Every results file records the commit, date, models, prices, judge
   model and a fingerprint of each labelled-data file.
 - **The harness is tested.** 160 offline tests, written alongside repeated rounds of
@@ -86,7 +89,11 @@ Each case also records tokens (input, output, reasoning), cost at Groq's prices 
 
 Four setups, 3 runs each (20b@medium: 2, as its third run hit Groq's daily token limit),
 first run judged. Cells show passed/scored cases; the floor is the best a constant answer
-does.
+does. The follow_up_decision row was measured on the first 8 cases, before the app decided
+non-answers by itself. Re-run on the 16 cases (12 decided by the model, floor 6/12, 3 runs):
+120b at medium 30/36, 20b at low 18/36. 20b asked a follow-up after every answer, even plainly
+wrong ones. 120b moved on from every bad answer, including the two that were on the right track
+and deserved a follow-up, so it routes by the grade rather than the answer.
 
 | Task | Floor | 20b low | 120b low | 20b medium | 120b medium |
 | :--- | :--- | :--- | :--- | :--- | :--- |

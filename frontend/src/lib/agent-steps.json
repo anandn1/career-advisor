@@ -9,7 +9,7 @@
   "learning_path": {
     "plan": ["entry", "planner"],
     "search": ["iteration_controller", "fetch_course_catalog", "web_search_for_courses", "process_and_store_courses"],
-    "score": ["start_evaluation", "check_prerequisites", "match_interests", "estimate_workload", "aggregate_scores", "recommend_enrollment", "suggest_alternatives"],
+    "score": ["start_evaluation", "match_interests", "estimate_workload", "aggregate_scores", "recommend_enrollment", "suggest_alternatives"],
     "assemble": ["architect", "handle_submission"],
     "review": ["critic", "prepare_revision"]
   },

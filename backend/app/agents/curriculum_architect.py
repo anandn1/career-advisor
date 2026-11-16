@@ -3,7 +3,7 @@
 Graph outline:
   planner -> for each skill gap:
                  search the course catalog (Chroma) -> web search + store if empty
-                 -> parallel checks (prerequisites, interests, workload)
+                 -> parallel checks (interests, workload)
                  -> aggregate scores -> recommend top courses (or alternatives)
           -> architect assembles the path via a tool call -> critic reviews
           -> revise until approved or MAX_REVISIONS is reached.
@@ -33,6 +33,7 @@ from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from pydantic import BaseModel, Field
 
+from app.agents import skill_names
 from app.core.config import get_settings
 from app.core.graphs import StepCallback, run_graph
 from app.core.resources import get_chroma, get_llm, get_web_search
@@ -43,7 +44,6 @@ CATALOG_CANDIDATES = 10
 COURSES_PER_SKILL = 3
 MAX_ARCHITECT_ATTEMPTS = 2
 MAX_REVISIONS = 2
-NO_PREREQUISITE = 0
 NO_INTEREST_OVERLAP_SCORE = 0.5
 INTEREST_SCORE_BOOST = 1.5
 MAX_SCORE = 10
@@ -58,7 +58,6 @@ MAX_SKILLS = 15
 class Course(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     title: str
-    prereqs: list[int] = Field(default_factory=list, description="Course IDs (use 0 if none)")
     difficulty: int = Field(..., ge=1, le=5, description="1=easy, 5=hard")
     topics: list[str] = Field(default_factory=list)
     url: str
@@ -72,7 +71,6 @@ class NewCourseList(BaseModel):
 class UserProfile(BaseModel):
     interests: list[str]
     skill_level: str = Field(..., description="'Beginner', 'Intermediate' or 'Advanced'")
-    past_courses: list[int] = Field(..., description="Course IDs from projects (use 0 if none)")
 
 
 class PlannerOutput(BaseModel):
@@ -113,7 +111,6 @@ def _course_to_document(course: Course) -> Document:
     )
     metadata = course.model_dump()
     # Chroma metadata holds only scalars, so lists are stored as JSON strings.
-    metadata["prereqs"] = json.dumps(course.prereqs)
     metadata["topics"] = json.dumps(course.topics)
     return Document(page_content=content, metadata=metadata)
 
@@ -128,7 +125,6 @@ def _stored_list(value) -> list:
 
 def _document_to_course(document: Document) -> Course:
     metadata = dict(document.metadata)
-    metadata["prereqs"] = [int(p) for p in _stored_list(metadata.get("prereqs"))]
     metadata["topics"] = _stored_list(metadata.get("topics"))
     return Course(**metadata)
 
@@ -202,8 +198,7 @@ Rules:
 - If 10+ skills are listed as gaps, extract ALL of them.
 - Prioritize skills that appear multiple times or are marked as critical.
 - Include both technical skills and tools.
-- Infer skill_level from the resume (Beginner/Intermediate/Advanced).
-- Estimate past_courses from mentioned projects (use 0 if unclear).""",
+- Infer skill_level from the resume (Beginner/Intermediate/Advanced).""",
         ),
         (
             "human",
@@ -220,7 +215,7 @@ PROCESS_SEARCH_PROMPT = ChatPromptTemplate.from_messages(
             """You are a data extraction expert. Convert web search results into Course objects.
 - Create unique IDs (e.g. 'aws-udemy-architect').
 - Estimate difficulty realistically (1-5).
-- Extract prerequisites (use [0] if none) and ALL relevant topics.
+- Extract ALL relevant topics.
 - Every course MUST have a valid URL and description.
 - Ignore results that are not courses.""",
         ),
@@ -388,15 +383,6 @@ def start_evaluation(state: CurriculumGraphState) -> dict:
     return {}
 
 
-def check_prerequisites(state: CurriculumGraphState) -> dict:
-    completed = set(state["user_profile"].past_courses)
-    logs = []
-    for course in state["course_catalog"]:
-        required = {p for p in course.prereqs if p != NO_PREREQUISITE}
-        logs.append({"type": "prereq", "course_id": course.id, "pass": required <= completed})
-    return {"evaluation_logs": logs}
-
-
 def _interest_score(interests: set[str], topics: set[str]) -> float:
     """Base score for any course, rising toward 1.0 as more interests overlap."""
     if not interests:
@@ -432,12 +418,11 @@ def estimate_workload(state: CurriculumGraphState) -> dict:
     return {"evaluation_logs": logs}
 
 
-_LOG_FIELDS = {"prereq": ("prereq_pass", "pass"), "interest": ("interest_score", "score"),
-               "workload": ("workload_ok", "load_ok")}  # fmt: skip
+_LOG_FIELDS = {"interest": ("interest_score", "score"), "workload": ("workload_ok", "load_ok")}
 
 
 def aggregate_scores(state: CurriculumGraphState) -> dict:
-    """Combine the three checks: interest score out of 10, zero if prereqs/workload fail."""
+    """Combine the checks: interest score out of 10, zero if the workload is too high."""
     courses = {course.id: course for course in state["course_catalog"]}
     checks: dict[str, dict] = {}
     for log in state["evaluation_logs"]:
@@ -448,7 +433,7 @@ def aggregate_scores(state: CurriculumGraphState) -> dict:
     for course_id, details in checks.items():
         if course_id not in courses:
             continue
-        eligible = details.get("prereq_pass", False) and details.get("workload_ok", False)
+        eligible = details.get("workload_ok", False)
         score = details.get("interest_score", 0) * MAX_SCORE if eligible else 0
         evaluated.append(
             {"course": courses[course_id], "score": round(score, 2), "details": details}
@@ -617,14 +602,14 @@ def get_curriculum_graph() -> CompiledStateGraph:
     nodes = [
         entry_node, planner_node, iteration_controller_node, fetch_course_catalog,
         web_search_for_courses, process_and_store_courses, start_evaluation,
-        check_prerequisites, match_interests, estimate_workload, aggregate_scores,
+        match_interests, estimate_workload, aggregate_scores,
         recommend_enrollment, suggest_alternatives, architect_node, handle_submission_node,
         critic_node, prepare_revision_node,
     ]  # fmt: skip
     for node in nodes:
         graph.add_node(node.__name__.removesuffix("_node"), node)
 
-    parallel_checks = ["check_prerequisites", "match_interests", "estimate_workload"]
+    parallel_checks = ["match_interests", "estimate_workload"]
     graph.set_entry_point("entry")
     graph.add_edge("entry", "planner")
     graph.add_edge("planner", "iteration_controller")
@@ -671,21 +656,26 @@ def build_learning_path(
     )
 
 
-SOFT_SKILLS = {
-    "communication", "teamwork", "collaboration", "problem solving", "problem-solving",
-    "scrum", "agile", "agile methodologies", "kanban", "critical thinking",
-    "project management", "user experience", "user interface", "leadership",
-    "presentation", "time management",
-}  # fmt: skip
-
-
 def learning_path_inputs(
     skill_gaps: list[str], user_skills: list[str], target_role: str
 ) -> tuple[str, str]:
     """(skill gap text, resume inventory) for the graph; soft skills skipped when possible."""
-    technical = [gap for gap in skill_gaps if gap.lower() not in SOFT_SKILLS] or skill_gaps
     inventory = json.dumps({"skills": user_skills, "target_role": target_role}, indent=2)
-    return "\n".join(technical), inventory
+    return "\n".join(_technical(skill_gaps)), inventory
+
+
+def _technical(skill_gaps: list[str]) -> list[str]:
+    return [gap for gap in skill_gaps if not skill_names.is_soft_skill(gap)] or skill_gaps
+
+
+def gaps_without_courses(skill_gaps: list[str], path: PersonalizedLearningPath) -> list[str]:
+    """The gaps planned for (soft skills skipped) that the path recommends no course for."""
+    covered = [course.skill_name for course in path.recommendations]
+    return [
+        gap
+        for gap in _technical(skill_gaps)
+        if not any(skill_names.same_skill(gap, skill) for skill in covered)
+    ]
 
 
 def plan_learning_path(

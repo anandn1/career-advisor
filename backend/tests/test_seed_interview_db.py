@@ -69,6 +69,20 @@ def test_hash_inside_a_metadata_value_is_kept(tmp_path):
     assert parse(tmp_path, text)[0].metadata["topic"] == "c#"
 
 
+def test_topic_names_are_kept_as_written_for_showing(tmp_path):
+    text = "#TOPIC: Machine Learning / AI   # from the 2024 list\n#DIFFICULTY: Easy\nWhat is ML?\n"
+    metadata = parse(tmp_path, text)[0].metadata
+    assert (metadata["topic"], metadata["topic_name"]) == (
+        "machine learning / ai",
+        "Machine Learning / AI",
+    )
+
+
+def test_topic_names_carry_over_to_later_sections(tmp_path):
+    names = {d.metadata["topic_name"] for d in parse(tmp_path, TWO_SECTIONS)}
+    assert names == {"System Design"}
+
+
 def test_comment_lines_are_dropped(tmp_path):
     text = "#TOPIC: Arrays\n#DIFFICULTY: Easy\n#Relevant at all levels\nTwo sum.\n"
     assert parse(tmp_path, text)[0].page_content == "Two sum."

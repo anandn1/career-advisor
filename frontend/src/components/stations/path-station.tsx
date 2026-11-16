@@ -7,7 +7,7 @@ import { useCurrentSession } from "@/components/session/session-shell";
 import { StationHeader } from "@/components/session/station-header";
 import { useLatestRun } from "@/components/stations/use-latest-run";
 import { Button } from "@/components/ui/button";
-import { type LearningPath, useReport, useStartRun } from "@/hooks/use-career";
+import { type LearningPath, type LearningPathResult, useReport, useStartRun } from "@/hooks/use-career";
 import { api, unwrap } from "@/lib/api/client";
 import { isFinished, station } from "@/lib/stations";
 
@@ -21,7 +21,23 @@ export function groupBySkill(path: LearningPath) {
   return [...groups.entries()];
 }
 
-function PathResults({ path }: { path: LearningPath }) {
+export function GapsWithoutCourses({ gaps, webSearch }: { gaps: string[]; webSearch: boolean | undefined }) {
+  if (gaps.length === 0) return null;
+  return (
+    <div className="max-w-3xl rounded-lg border-2 border-dashed border-rule p-4">
+      <p><span className="font-bold">No course found for:</span> {gaps.join(", ")}.</p>
+      {webSearch === false && (
+        <p className="mt-1 text-sm text-ink-muted">
+          Web search for courses is off, so only the built-in catalog was searched. Set{" "}
+          <code className="font-mono">TAVILY_API_KEY</code> to search the web as well.
+        </p>
+      )}
+    </div>
+  );
+}
+
+export function PathResults({ result }: { result: LearningPathResult }) {
+  const { path } = result;
   return (
     <div className="flex flex-col gap-6">
       <p className="max-w-3xl text-lg">{path.user_summary}</p>
@@ -43,6 +59,7 @@ function PathResults({ path }: { path: LearningPath }) {
           </li>
         ))}
       </ol>
+      <GapsWithoutCourses gaps={result.gaps_without_courses ?? []} webSearch={result.web_search_enabled} />
     </div>
   );
 }
@@ -52,8 +69,8 @@ export function PathStation() {
   const report = useReport(session.id);
   const { latest } = useLatestRun(session.id, PATH.kinds);
   const start = useStartRun(session.id, async () =>
-    unwrap(await api.POST("/api/v1/sessions/{session_id}/runs/learning-path", {
-      params: { path: { session_id: session.id } },
+    unwrap(await api.POST("/api/v1/sessions/{session_id}/runs", {
+      params: { path: { session_id: session.id } }, body: { kind: "learning_path" },
     })));
   const gaps = report.data?.job_market?.analysis.skill_gaps ?? [];
   const busy = start.isPending || (latest !== undefined && !isFinished(latest));
@@ -80,7 +97,7 @@ export function PathStation() {
       )}
       {start.error && <p role="alert" className="text-danger">{start.error.message}</p>}
       <RunPanel sessionId={session.id} station={PATH} runId={latest?.id}>
-        {(run) => <PathResults path={(run.result as unknown as { path: LearningPath }).path} />}
+        {(run) => <PathResults result={run.result as unknown as LearningPathResult} />}
       </RunPanel>
     </>
   );

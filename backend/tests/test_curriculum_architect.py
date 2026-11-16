@@ -9,7 +9,7 @@ from app.agents import curriculum_architect as ca
 
 
 def course(course_id="c1", title="Course", topics=("Python",), description="", **extra):
-    fields = {"difficulty": 2, "url": "https://example.com", "prereqs": []} | extra
+    fields = {"difficulty": 2, "url": "https://example.com"} | extra
     return ca.Course(
         id=course_id,
         title=title,
@@ -19,8 +19,8 @@ def course(course_id="c1", title="Course", topics=("Python",), description="", *
     )
 
 
-def profile(interests=("python",), level="Intermediate", past=()):
-    return ca.UserProfile(interests=list(interests), skill_level=level, past_courses=list(past))
+def profile(interests=("python",), level="Intermediate"):
+    return ca.UserProfile(interests=list(interests), skill_level=level)
 
 
 class FakeStore:
@@ -102,7 +102,7 @@ def test_matching_catalog_courses_go_to_evaluation():
 
 
 def test_courses_survive_the_document_round_trip():
-    original = course("c9", "T", topics=("Extract, Transform, Load", "B"), prereqs=[101, 202])
+    original = course("c9", "T", topics=("Extract, Transform, Load", "B"))
     assert ca._document_to_course(ca._course_to_document(original)) == original
 
 
@@ -167,19 +167,6 @@ def test_no_search_results_skip_the_llm(monkeypatch):
 # --- Parallel checks and scoring ---
 
 
-def test_prerequisite_zero_means_none_required():
-    state = {"user_profile": profile(), "course_catalog": [course(prereqs=[0])]}
-    assert ca.check_prerequisites(state)["evaluation_logs"][0]["pass"] is True
-
-
-def test_missing_prerequisite_fails_the_check():
-    state = {
-        "user_profile": profile(past=[101]),
-        "course_catalog": [course(prereqs=[101, 202])],
-    }
-    assert ca.check_prerequisites(state)["evaluation_logs"][0]["pass"] is False
-
-
 @pytest.mark.parametrize(
     ("level", "difficulty", "ok"),
     [
@@ -198,9 +185,8 @@ def test_workload_depends_on_skill_level(level, difficulty, ok):
     assert ca.estimate_workload(state)["evaluation_logs"][0]["load_ok"] is ok
 
 
-def _logs(course_id, prereq=True, interest=0.8, workload=True):
+def _logs(course_id, interest=0.8, workload=True):
     return [
-        {"type": "prereq", "course_id": course_id, "pass": prereq},
         {"type": "interest", "course_id": course_id, "score": interest},
         {"type": "workload", "course_id": course_id, "load_ok": workload},
     ]
@@ -214,11 +200,10 @@ def test_eligible_course_scores_interest_out_of_ten():
     assert ca.aggregate_scores(state)["evaluated_courses"][0]["score"] == 8.0
 
 
-@pytest.mark.parametrize("failing", [{"prereq": False}, {"workload": False}])
-def test_failed_check_scores_zero(failing):
+def test_a_course_too_hard_for_the_level_scores_zero():
     state = {
         "course_catalog": [course("c1")],
-        "evaluation_logs": _logs("c1", **failing),
+        "evaluation_logs": _logs("c1", workload=False),
     }
     assert ca.aggregate_scores(state)["evaluated_courses"][0]["score"] == 0
 
@@ -500,15 +485,21 @@ def test_existing_seed_courses_are_not_added_again(monkeypatch):
 def test_documents_from_the_store_can_have_empty_lists():
     document = Document(
         page_content="x",
-        metadata=course(prereqs=[], topics=()).model_dump() | {"prereqs": "", "topics": ""},
+        metadata=course(topics=()).model_dump() | {"topics": ""},
     )
     assert ca._document_to_course(document).topics == []
 
 
 def test_older_comma_separated_metadata_still_loads():
-    metadata = course().model_dump() | {"prereqs": "101,202", "topics": "Python, SQL"}
+    metadata = course().model_dump() | {"topics": "Python, SQL"}
     restored = ca._document_to_course(Document(page_content="x", metadata=metadata))
-    assert (restored.prereqs, restored.topics) == ([101, 202], ["Python", "SQL"])
+    assert restored.topics == ["Python", "SQL"]
+
+
+def test_courses_stored_with_prerequisites_by_older_versions_still_load():
+    stored = ca._course_to_document(course("c1"))
+    stored.metadata["prereqs"] = "[101, 202]"
+    assert ca._document_to_course(stored) == course("c1")
 
 
 @pytest.mark.parametrize(
@@ -625,3 +616,38 @@ def test_common_soft_skills_are_skipped(soft_skill, monkeypatch):
 )
 def test_interest_score_exact_values(interests, topics, score):
     assert ca._interest_score(interests, topics) == pytest.approx(score)
+
+
+# --- Gaps the path has no course for ---
+
+
+def _path(*skills):
+    courses = [
+        ca.CourseRecommendation(
+            skill_name=skill, course_title="T", course_url="https://x", description=""
+        )
+        for skill in skills
+    ]
+    return ca.PersonalizedLearningPath(
+        user_summary="", skill_gaps=list(skills), recommendations=courses
+    )
+
+
+def test_gaps_without_a_course_are_listed_in_their_order():
+    assert ca.gaps_without_courses(["kubernetes", "docker", "go"], _path("docker")) == [
+        "kubernetes",
+        "go",
+    ]
+
+
+def test_a_course_for_the_gap_under_another_spelling_covers_it():
+    gaps = ["kubernetes", "microservices architecture"]
+    assert ca.gaps_without_courses(gaps, _path("Kubernetes", "Microservices")) == []
+
+
+def test_soft_skills_are_not_listed_as_gaps_without_courses():
+    assert ca.gaps_without_courses(["communication", "go"], _path()) == ["go"]
+
+
+def test_soft_skills_are_listed_when_they_were_all_there_was_to_plan():
+    assert ca.gaps_without_courses(["communication"], _path()) == ["communication"]

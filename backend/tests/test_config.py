@@ -65,9 +65,39 @@ def test_cors_origins_default_to_local_frontend():
     assert settings().cors_origins == ["http://localhost:3000"]
 
 
-def test_empty_optional_keys_count_as_unset(monkeypatch):
-    monkeypatch.setenv("COHERE_API_KEY", "")
-    assert settings().cohere_api_key is None
+@pytest.mark.parametrize("key", ["COHERE_API_KEY", "TAVILY_API_KEY", "GITHUB_ACCESS_TOKEN"])
+@pytest.mark.parametrize("blank", ["", "   "], ids=["empty", "spaces"])
+def test_blank_optional_keys_count_as_unset(monkeypatch, key, blank):
+    monkeypatch.setenv(key, blank)
+    assert getattr(settings(), key.lower()) is None
+
+
+def test_keys_pasted_with_spaces_are_trimmed(monkeypatch):
+    monkeypatch.setenv("GROQ_API_KEY", " gsk-123 ")
+    monkeypatch.setenv("COHERE_API_KEY", "\tco-456\n")
+    keys = settings()
+    assert keys.groq_api_key.get_secret_value() == "gsk-123"
+    assert keys.cohere_api_key.get_secret_value() == "co-456"
+
+
+@pytest.mark.parametrize(
+    ("name", "field"), [("GROQ_API_KEY", "groq_api_key"), ("DATABASE_URL", "DATABASE_URL")]
+)
+def test_a_blank_required_setting_is_reported_missing(monkeypatch, name, field):
+    monkeypatch.setenv(name, "   ")
+    with pytest.raises(ValidationError) as error:
+        settings()
+    assert [(e["type"], e["loc"]) for e in error.value.errors()] == [("missing", (field,))]
+
+
+def test_a_padded_database_url_is_trimmed_and_normalised(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "  postgres://u:p@db:5432/app  ")
+    assert settings().database_url == "postgresql://u:p@db:5432/app"
+
+
+def test_a_blank_number_keeps_its_default(monkeypatch):
+    monkeypatch.setenv("SESSION_TTL_DAYS", "  ")
+    assert settings().session_ttl_days == 30
 
 
 def test_data_paths_live_under_data_dir(monkeypatch, tmp_path):

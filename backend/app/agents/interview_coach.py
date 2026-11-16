@@ -24,6 +24,7 @@ from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Command, interrupt
 
+from app.agents.ingestion import seed_interview_db
 from app.core.checkpointer import get_checkpointer
 from app.core.config import get_settings
 from app.core.resources import get_chroma, get_llm, get_reranker
@@ -45,34 +46,42 @@ DEFAULT_GRADE = "moderate"
 EVALUATION_ERROR = "error"
 MAX_FOLLOW_UPS_PER_QUESTION = 2
 NO_QUESTION_IDS = {"NONE", "ERROR", "DONE"}
+FOLLOW_UP_MARKER = "\n[FOLLOW-UP]: "
+# A bad answer that says the candidate does not know: a follow-up would only ask again.
+_NON_ATTEMPT = re.compile(
+    r"\b(?:don['’]?t|do not) (?:really )?know\b|\bdunno\b|\bno (?:idea|clue)\b|\bnot sure\b"
+    r"|\bidk\b|\bcan['’]?t answer\b|\bhaven['’]?t (?:studied|learned)\b|\btell me the answer\b"
+    r"|\b(?:can we|could we|let['’]?s|please|rather|like to|want to) skip\b"
+    r"|\bskip (?:this|it|that|the question)\b"
+    r"|\b(?:can we|could we|let['’]?s|please|just) move on\b|\bmind moving on\b",
+    re.IGNORECASE,
+)
+# ...unless the candidate goes on to try ("not sure, but I think it is a lock").
+_ATTEMPT = re.compile(
+    r"\b(?:but|though|although|however|maybe|probably|perhaps)\b"
+    r"|\bi (?:think|believe|guess)\b|\b(?:i would|i['’]d) (?:use|say|start|go|pick|try)\b",
+    re.IGNORECASE,
+)
+
 DEFAULT_TOPICS = ["Data Structures & Algorithms", "System Design"]
 
-# Skill-gap keywords and the interview topic each maps to.
-TOPIC_FOR_KEYWORD = {
-    "angular": "Frontend Frameworks",
-    "react": "Frontend Frameworks",
-    "vue": "Frontend Frameworks",
-    "aws": "Cloud & DevOps",
-    "gcp": "Cloud & DevOps",
-    "google cloud": "Cloud & DevOps",
-    "azure": "Cloud & DevOps",
-    "docker": "Cloud & DevOps",
-    "kubernetes": "Cloud & DevOps",
-    "python": "Programming Languages",
-    "java": "Programming Languages",
-    "go": "Programming Languages",
-    "javascript": "Programming Languages",
-    "typescript": "Programming Languages",
-    "sql": "Databases",
-    "postgresql": "Databases",
-    "mongodb": "Databases",
-    "system design": "System Design",
-    "api": "System Design",
-    "microservices": "System Design",
-    "css": "Frontend Basics",
-    "html": "Frontend Basics",
-    "bootstrap": "Frontend Basics",
-}
+# Skill-gap keywords, and words that name the matching topic. Each company's question file
+# names its topics its own way ("Cloud & Infrastructure", "Cloud/Virtualization"), so a
+# gap gets the first of the company's topics that contains one of these words.
+_FRONTEND = ("frontend", "ui/ux")
+_CLOUD = ("cloud", "devops", "deployment")
+_LANGUAGES = ("programming language", "coding", "language-specific", "language")
+TOPIC_WORDS_FOR_KEYWORD = {
+    "angular": _FRONTEND, "react": _FRONTEND, "vue": _FRONTEND, "css": _FRONTEND,
+    "html": _FRONTEND, "bootstrap": _FRONTEND,
+    "aws": _CLOUD, "gcp": _CLOUD, "google cloud": _CLOUD, "azure": _CLOUD,
+    "docker": _CLOUD, "kubernetes": _CLOUD,
+    "python": ("python", *_LANGUAGES), "java": _LANGUAGES, "go": _LANGUAGES,
+    "javascript": _LANGUAGES, "typescript": _LANGUAGES,
+    "sql": ("database",), "postgresql": ("database",), "mongodb": ("database",),
+    "system design": ("system design",), "microservices": ("system design",),
+    "api": ("api", "system design"),
+}  # fmt: skip
 SKILL_GAPS_TO_MAP = 15
 
 InterviewFocus = Literal["all", "proficient", "gaps"]
@@ -92,6 +101,7 @@ class InterviewAgentState(MessagesState):
     topic_performance: dict[str, list[dict]]
     current_difficulty_per_topic: dict[str, list[str]]
     follow_up_count: int
+    follow_up_failed: bool
 
 
 EVALUATION_PROMPT = PromptTemplate.from_template(
@@ -138,27 +148,68 @@ Example: if the answer was about sharding, ask "How would you handle a hot shard
 Your follow-up question:""")
 
 
-_KEYWORDS_LONGEST_FIRST = sorted(TOPIC_FOR_KEYWORD, key=len, reverse=True)
+_KEYWORDS_LONGEST_FIRST = sorted(TOPIC_WORDS_FOR_KEYWORD, key=len, reverse=True)
 
 
 def _has_word(text: str, keyword: str) -> bool:
-    """Whole-word match, so 'go' is not found in 'mongodb' or 'algorithms'."""
-    pattern = rf"(?<![a-z0-9+#]){re.escape(keyword)}(?![a-z0-9+#])"
+    """Whole-word match (plural allowed), so 'go' is not found in 'mongodb' or 'algorithms'."""
+    pattern = rf"(?<![a-z0-9+#]){re.escape(keyword)}s?(?![a-z0-9+#])"  # "APIs" too
     return re.search(pattern, text.lower()) is not None
 
 
-def topics_for_skill_gaps(skill_gaps: list[str]) -> list[str]:
-    """Map skill gaps to interview topics; System Design is always included."""
-    topics = set()
+@cache
+def _topic_names_by_company() -> dict[str, dict[str, str]]:
+    """Each company's topics as {lower-case name: name as written}, from the question files."""
+    names: dict[str, dict[str, str]] = {}
+    for document in seed_interview_db.load_documents_from_files():
+        meta = document.metadata
+        names.setdefault(meta["company"], {}).setdefault(meta["topic"], meta["topic_name"])
+    return names
+
+
+def interview_topics(company_focus: str) -> list[str]:
+    """The topics that have questions for this company focus ("all": any company), A to Z."""
+    names: dict[str, str] = {}
+    for company in _companies_for(company_focus):
+        for key, name in _topic_names_by_company().get(company, {}).items():
+            names.setdefault(key, name)
+    return sorted(names.values(), key=str.lower)
+
+
+def resolve_topics(topics: list[str], company_focus: str) -> tuple[list[str], list[str]]:
+    """(the topics named as in the question files, the ones with no questions here);
+    case and surrounding spaces do not matter."""
+    available = {topic.lower(): topic for topic in interview_topics(company_focus)}
+    found = [available[t.strip().lower()] for t in topics if t.strip().lower() in available]
+    unknown = [t for t in topics if t.strip().lower() not in available]
+    return list(dict.fromkeys(found)), unknown
+
+
+def _topic_named_by(words: tuple[str, ...], topics: list[str]) -> str | None:
+    """The first topic whose name contains the first word that any topic name contains."""
+    for word in words:
+        for topic in topics:
+            if word in topic.lower():
+                return topic
+    return None
+
+
+def topics_for_skill_gaps(skill_gaps: list[str], company_focus: str) -> list[str]:
+    """The company's topics for the gaps, plus System Design; its default topics if none fit."""
+    available = interview_topics(company_focus)
+    chosen = set()
     for gap in skill_gaps[:SKILL_GAPS_TO_MAP]:
-        topic = next(
-            (TOPIC_FOR_KEYWORD[kw] for kw in _KEYWORDS_LONGEST_FIRST if _has_word(gap, kw)), None
-        )
+        keyword = next((kw for kw in _KEYWORDS_LONGEST_FIRST if _has_word(gap, kw)), None)
+        topic = keyword and _topic_named_by(TOPIC_WORDS_FOR_KEYWORD[keyword], available)
         if topic:
-            topics.add(topic)
-    if not topics:
-        return list(DEFAULT_TOPICS)
-    return sorted(topics | {"System Design"})
+            chosen.add(topic)
+    defaults = [topic for topic in available if topic in DEFAULT_TOPICS]
+    if not chosen:
+        return defaults or available[: len(DEFAULT_TOPICS)]
+    system_design = _topic_named_by(("system design",), available)
+    if system_design:
+        chosen.add(system_design)
+    return sorted(chosen, key=str.lower)
 
 
 # --- Difficulty adaptation ---
@@ -311,13 +362,20 @@ def ask_follow_up_node(state: InterviewAgentState) -> dict:
             question=last["question"], answer=last["answer"], grade=last["evaluation"]
         )
         follow_up = str(get_llm().invoke(prompt).content).strip()
-    except Exception as error:  # provider errors: fall back to moving on
+    except Exception as error:  # provider errors: move on to the next question instead
         logger.warning("Follow-up generation failed: %s", error)
-        follow_up = "Let's move on."
+        return {"follow_up_failed": True}
     return {
         "messages": [AIMessage(content=follow_up, name=INTERVIEWER)],
         "follow_up_count": state.get("follow_up_count", 0) + 1,
+        "follow_up_failed": False,
     }
+
+
+def route_after_follow_up(
+    state: InterviewAgentState,
+) -> Literal["wait_for_answer", "update_coverage"]:
+    return "update_coverage" if state.get("follow_up_failed") else "wait_for_answer"
 
 
 def wait_for_answer_node(state: InterviewAgentState) -> dict:
@@ -383,7 +441,7 @@ def evaluate_answer_node(state: InterviewAgentState) -> dict:
     if is_follow_up:
         last = report[-1]
         last.update(evaluation=grade, feedback=feedback, timestamp=now)
-        last["answer"] = f"{last.get('answer', '')}\n[FOLLOW-UP]: {answer}"
+        last["answer"] = f"{last.get('answer', '')}{FOLLOW_UP_MARKER}{answer}"
         if topic_entries and topic_entries[-1]["question_id"] == question_id:
             topic_entries[-1] = {
                 **topic_entries[-1],
@@ -429,6 +487,20 @@ def _user_asked_to_stop(messages: list[BaseMessage]) -> bool:
     return last_answer is not None and str(last_answer.content).lower().strip() in STOP_WORDS
 
 
+def did_not_attempt(answer: str, grade: str) -> bool:
+    """No answer, or a bad one that only says the candidate does not know ("No idea, skip?")."""
+    if not answer.strip():
+        return True
+    return grade == "bad" and bool(_NON_ATTEMPT.search(answer)) and not _ATTEMPT.search(answer)
+
+
+def _named_decisions(reply: str) -> set[str]:
+    """The decisions a reply names, read leniently ("**Follow-up**" is FOLLOW_UP). A reply
+    naming both ("NEW_QUESTION, no FOLLOW_UP needed") is unclear, so the interview moves on."""
+    text = re.sub(r"[\s-]+", "_", reply.upper())
+    return {decision for decision in ("FOLLOW_UP", "NEW_QUESTION") if decision in text}
+
+
 def decide_action_router(
     state: InterviewAgentState,
 ) -> Literal["ask_follow_up", "update_coverage"]:
@@ -440,15 +512,17 @@ def decide_action_router(
     out_of_follow_ups = state.get("follow_up_count", 0) >= MAX_FOLLOW_UPS_PER_QUESTION
     if last["evaluation"] in GOOD_GRADES | {EVALUATION_ERROR} or out_of_follow_ups:
         return "update_coverage"
+    if did_not_attempt(last["answer"].split(FOLLOW_UP_MARKER)[-1], last["evaluation"]):
+        return "update_coverage"
     try:
         prompt = ACTION_CHOICE_PROMPT.format(
             question=last["question"], answer=last["answer"], grade=last["evaluation"]
         )
-        choice = str(get_llm().invoke(prompt).content).upper()
+        reply = str(get_llm().invoke(prompt).content)
     except Exception as error:  # provider errors: default to a new question
         logger.warning("Follow-up decision failed: %s", error)
         return "update_coverage"
-    return "ask_follow_up" if "FOLLOW_UP" in choice else "update_coverage"
+    return "ask_follow_up" if _named_decisions(reply) == {"FOLLOW_UP"} else "update_coverage"
 
 
 def route_after_question(
@@ -501,7 +575,7 @@ def build_interview_graph() -> StateGraph:
     graph.add_conditional_edges("generate_question", route_after_question)
     graph.add_edge("wait_for_answer", "evaluate_answer")
     graph.add_conditional_edges("evaluate_answer", decide_action_router)
-    graph.add_edge("ask_follow_up", "wait_for_answer")
+    graph.add_conditional_edges("ask_follow_up", route_after_follow_up)
     graph.add_conditional_edges("update_coverage", should_continue_router)
     graph.add_edge("synthesize_and_update", END)
     return graph

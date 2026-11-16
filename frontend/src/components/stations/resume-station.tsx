@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { type ResumeResult, type ResumeReview, useStartRun, useTemplates } from "@/hooks/use-career";
-import { api, type ResumeDraft, runUrl, unwrap, uploadResume } from "@/lib/api/client";
+import { api, type ResumeDraft, resumeUrl, unwrap, uploadResume } from "@/lib/api/client";
 import { isFinished, station } from "@/lib/stations";
 
 const RESUME = station("resume");
@@ -88,9 +88,10 @@ function GenerateForm({ sessionId, disabled }: { sessionId: string; disabled: bo
   const [templateId, setTemplateId] = useState("");
   const [includeGithub, setIncludeGithub] = useState(true);
   const start = useStartRun(sessionId, async () =>
-    unwrap(await api.POST("/api/v1/sessions/{session_id}/runs/resume", {
+    unwrap(await api.POST("/api/v1/sessions/{session_id}/runs", {
       params: { path: { session_id: sessionId } },
       body: {
+        kind: "resume",
         contact,
         education,
         work_experience: work.map(({ bullets, ...rest }) => ({ ...rest, description_bullets: linesOf(bullets) })),
@@ -167,9 +168,9 @@ function DraftEditor({ sessionId, runId, result, disabled }: {
   const [summary, setSummary] = useState(result.draft.summary);
   const [skills, setSkills] = useState(skillsToText(result.draft.skills));
   const rerender = useStartRun(sessionId, async () =>
-    unwrap(await api.POST("/api/v1/sessions/{session_id}/runs/resume-render", {
+    unwrap(await api.POST("/api/v1/sessions/{session_id}/runs", {
       params: { path: { session_id: sessionId } },
-      body: { draft: { ...result.draft, summary, skills: textToSkills(skills) }, template_id: result.template_id },
+      body: { kind: "resume_render", draft: { ...result.draft, summary, skills: textToSkills(skills) }, template_id: result.template_id },
     })));
 
   return (
@@ -182,14 +183,14 @@ function DraftEditor({ sessionId, runId, result, disabled }: {
         {rerender.error && <p role="alert" className="text-danger">{rerender.error.message}</p>}
         <div className="flex flex-wrap gap-3">
           <Button type="submit" disabled={disabled || rerender.isPending}>Re-typeset with my edits</Button>
-          <Button asChild variant="outline"><a href={runUrl(sessionId, runId, "resume.tex")}>Download .tex</a></Button>
+          <Button asChild variant="outline"><a href={resumeUrl(sessionId, runId, "tex")}>Download .tex</a></Button>
           {result.has_pdf && (
-            <Button asChild variant="outline"><a href={`${runUrl(sessionId, runId, "resume.pdf")}?download=true`}>Download PDF</a></Button>
+            <Button asChild variant="outline"><a href={resumeUrl(sessionId, runId, "pdf", { download: true })}>Download PDF</a></Button>
           )}
         </div>
       </form>
       {result.has_pdf ? (
-        <iframe title="Resume preview" src={runUrl(sessionId, runId, "resume.pdf")}
+        <iframe title="Resume preview" src={resumeUrl(sessionId, runId, "pdf")}
                 className="min-h-[36rem] w-full rounded-lg border-2 border-rule bg-surface" />
       ) : (
         <div className="rounded-lg border-2 border-dashed border-rule p-6 text-ink-muted">

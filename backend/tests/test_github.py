@@ -7,7 +7,14 @@ from app.core.config import get_settings
 from app.services import github
 
 
+@pytest.fixture(autouse=True)
+def _forget_rejected_tokens(monkeypatch):
+    monkeypatch.setattr(github, "_rejected_token", None)
+
+
 class FakeResponse:
+    status_code = 200
+
     def __init__(self, payload):
         self.payload = payload
 
@@ -115,6 +122,90 @@ def test_token_is_sent_when_configured(monkeypatch):
     assert seen[0]["headers"]["Authorization"] == "Bearer secret-token"
 
 
+class RejectedTokenResponse(FakeResponse):
+    status_code = 401
+
+    def raise_for_status(self):
+        raise requests.HTTPError("401 Unauthorized")
+
+
+def _github_rejecting(monkeypatch, bad_token):
+    """GitHub answering {"login": "octocat"}, except 401 for requests with `bad_token`."""
+    seen = []
+
+    def fake_get(url, headers=None, params=None, timeout=None):
+        sent = headers.get("Authorization")
+        seen.append(sent)
+        if sent == f"Bearer {bad_token}":
+            return RejectedTokenResponse({"message": "Bad credentials"})
+        return FakeResponse({"login": "octocat"})
+
+    monkeypatch.setattr(github.requests, "get", fake_get)
+    return seen
+
+
+def _use_token(monkeypatch, token):
+    monkeypatch.setenv("GITHUB_ACCESS_TOKEN", token)
+    get_settings.cache_clear()
+
+
+def test_a_rejected_token_is_dropped_and_the_request_retried(monkeypatch, caplog):
+    _use_token(monkeypatch, "expired")
+    seen = _github_rejecting(monkeypatch, "expired")
+    assert github.fetch_profile("octocat") == {"login": "octocat"}
+    assert seen == ["Bearer expired", None]
+    assert "GitHub rejected GITHUB_ACCESS_TOKEN" in caplog.text
+
+
+def test_later_requests_skip_the_rejected_token(monkeypatch):
+    _use_token(monkeypatch, "expired")
+    seen = _github_rejecting(monkeypatch, "expired")
+    github.fetch_profile("octocat")
+    github.fetch_profile("octocat")
+    assert seen == ["Bearer expired", None, None]
+
+
+def test_a_new_token_is_tried_after_an_old_one_was_rejected(monkeypatch):
+    _use_token(monkeypatch, "expired")
+    seen = _github_rejecting(monkeypatch, "expired")
+    github.fetch_profile("octocat")
+    _use_token(monkeypatch, "fresh")
+    github.fetch_profile("octocat")
+    assert seen[-1] == "Bearer fresh"
+
+
+def test_a_403_rate_limit_keeps_the_token(monkeypatch):
+    # GitHub answers 403 when the rate limit is used up; the token itself is fine.
+    _use_token(monkeypatch, "good")
+    seen = []
+
+    class RateLimited(RejectedTokenResponse):
+        status_code = 403
+
+        def raise_for_status(self):
+            raise requests.HTTPError("403 Forbidden")
+
+    def fake_get(url, headers=None, params=None, timeout=None):
+        seen.append(headers.get("Authorization"))
+        return RateLimited({})
+
+    monkeypatch.setattr(github.requests, "get", fake_get)
+    assert github.fetch_profile("octocat") == {}
+    assert (seen, github._rejected_token) == (["Bearer good"], None)
+
+
+def test_a_401_without_a_token_is_not_retried(monkeypatch):
+    seen = []
+
+    def fake_get(url, headers=None, params=None, timeout=None):
+        seen.append(url)
+        return RejectedTokenResponse({})
+
+    monkeypatch.setattr(github.requests, "get", fake_get)
+    assert github.fetch_profile("octocat") == {}
+    assert len(seen) == 1
+
+
 def test_no_authorization_header_without_token(monkeypatch):
     seen, _ = _capture(monkeypatch)
     github.fetch_profile("octocat")
@@ -188,6 +279,8 @@ def test_request_errors_give_empty_profile(monkeypatch):
 
 
 class ErrorResponse:
+    status_code = 404
+
     def __init__(self, error):
         self.error = error
 

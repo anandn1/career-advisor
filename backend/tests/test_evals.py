@@ -14,6 +14,7 @@ from app.services import latex
 from evals import baselines, report
 from evals.calibration import PairResult, calibrate
 from evals.core import (
+    DECIDED_BY_APP,
     RATE_LIMITED,
     CaseResult,
     JudgeRequest,
@@ -411,12 +412,58 @@ def test_no_decision_from_the_model_passes_no_follow_up_case(monkeypatch, llm):
     assert not any(r.passed for r in results)
 
 
-def test_a_clear_decision_is_scored_against_the_label(monkeypatch):
-    monkeypatch.setattr(interview_coach, "get_llm", lambda: FakeLlm("NEW_QUESTION"))
+def _decision_results(monkeypatch, reply: str):
+    """(results, whether the model decides it) for each follow-up decision case."""
+    monkeypatch.setattr(interview_coach, "get_llm", lambda: FakeLlm(reply))
     results = interview_task.follow_up_decision(_context())
     cases = load_data("interview")["follow_up_decision"]
-    expected = [case["expected"] == "NEW_QUESTION" for case in cases]
-    assert [r.passed for r in results] == expected
+    return list(zip(results, map(interview_task.decided_by_the_model, cases), strict=True))
+
+
+def test_a_clear_decision_is_scored_against_the_label(monkeypatch):
+    results = _decision_results(monkeypatch, "NEW_QUESTION")
+    cases = load_data("interview")["follow_up_decision"]
+    scored = [result.passed for result, by_model in results if by_model]
+    labels = [
+        c["expected"] == "NEW_QUESTION" for c in cases if interview_task.decided_by_the_model(c)
+    ]
+    assert scored == labels and len(scored) == 12
+
+
+def test_cases_the_app_decides_by_itself_are_not_scored(monkeypatch):
+    by_app = [
+        result for result, by_model in _decision_results(monkeypatch, "FOLLOW_UP") if not by_model
+    ]
+    assert [(r.score, r.passed, r.error) for r in by_app] == [(None, False, DECIDED_BY_APP)] * 4
+
+
+def test_cases_the_app_decides_agree_with_their_labels(monkeypatch):
+    by_app = [r for r, by_model in _decision_results(monkeypatch, "FOLLOW_UP") if not by_model]
+    assert [(r.details["got"], r.details["expected"]) for r in by_app] == [
+        ("NEW_QUESTION", "NEW_QUESTION")
+    ] * 4
+
+
+def test_the_model_decides_as_many_follow_ups_as_new_questions():
+    cases = load_data("interview")["follow_up_decision"]
+    labels = [c["expected"] for c in cases if interview_task.decided_by_the_model(c)]
+    assert labels.count("FOLLOW_UP") == labels.count("NEW_QUESTION") == 6
+
+
+def test_the_grade_alone_does_not_predict_every_decision():
+    cases = load_data("interview")["follow_up_decision"]
+    by_model = [c for c in cases if interview_task.decided_by_the_model(c)]
+    assert any((c["grade"] == "moderate") != (c["expected"] == "FOLLOW_UP") for c in by_model)
+
+
+def test_a_failed_decision_call_is_not_mistaken_for_one_the_app_made(monkeypatch):
+    monkeypatch.setattr(interview_coach, "get_llm", lambda: DeadLlm())
+    results = interview_task.follow_up_decision(_context())
+    cases = load_data("interview")["follow_up_decision"]
+    by_model = [
+        r for r, c in zip(results, cases, strict=True) if interview_task.decided_by_the_model(c)
+    ]
+    assert [(r.score, r.error == DECIDED_BY_APP) for r in by_model] == [(0.0, False)] * 12
 
 
 @pytest.mark.parametrize("reply", ["GRADE: badly", "GRADE: excellently done", "GRADE: goodish"])
@@ -843,7 +890,7 @@ def test_an_echoed_grade_template_fails_the_strict_parser():
         interview_task._strict_parse_grade("GRADE: [bad/moderate/good/excellent]")
 
 
-def test_every_follow_up_decision_case_reaches_the_model():
+def test_no_follow_up_decision_case_has_a_grade_the_router_skips():
     # The router answers good and excellent grades itself, without asking the model.
     for case in load_data("interview")["follow_up_decision"]:
         assert case["grade"] in {"bad", "moderate"}, case["id"]
@@ -1130,10 +1177,11 @@ def test_the_follow_up_objective_score_counts_the_checks_passed(question, score)
 
 
 def test_a_clear_follow_up_decision_is_scored_too(monkeypatch):
-    monkeypatch.setattr(interview_coach, "get_llm", lambda: FakeLlm("FOLLOW_UP"))
-    results = interview_task.follow_up_decision(_context())
+    results = _decision_results(monkeypatch, "FOLLOW_UP")
     cases = load_data("interview")["follow_up_decision"]
-    assert [r.passed for r in results] == [c["expected"] == "FOLLOW_UP" for c in cases]
+    scored = [result.passed for result, by_model in results if by_model]
+    labels = [c["expected"] == "FOLLOW_UP" for c in cases if interview_task.decided_by_the_model(c)]
+    assert scored == labels
 
 
 # --- Rate limits are the account's problem, not the model's ---
@@ -1275,6 +1323,25 @@ def test_a_crash_after_a_refused_call_is_put_down_to_the_refusal():
     result = ctx.run_case("t", "c", run)
     assert result.score is None
     assert result.error == "rate limited, not scored: ValueError: no courses extracted"
+
+
+def test_the_summary_counts_cases_the_app_decided_apart():
+    results = [
+        CaseResult("t", "a", "m", 1.0, True, Usage(), 0.0),
+        CaseResult("t", "b", "m", None, False, Usage(), 0.0, error=DECIDED_BY_APP),
+    ]
+    assert "| 1.00 (1/1, 1 decided by the app)" in report.summary_table(results)
+
+
+def test_cost_and_time_leave_out_cases_the_app_decided():
+    ran = CaseResult("t", "a", "m", 1.0, True, Usage(seconds=10.0), 0.002)
+    by_app = CaseResult("t", "b", "m", None, False, Usage(), 0.0, error=DECIDED_BY_APP)
+    assert "$2.00 10.0s" in report.summary_table([ran, by_app])
+
+
+def test_an_unscored_reason_from_the_task_is_kept():
+    result = _context().run_case("t", "c", lambda: Outcome(None, False, {}, DECIDED_BY_APP))
+    assert (result.score, result.error) == (None, DECIDED_BY_APP)
 
 
 def test_cost_and_time_are_averaged_over_the_cases_that_ran():

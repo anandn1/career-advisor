@@ -6,7 +6,7 @@ import pytest
 
 from app.agents.resume_reviewer import ResumeReview
 from app.agents.resume_strategist import ContactInfo, ResumeDraft, ResumeResult
-from app.core.config import REPO_ROOT
+from app.core.config import REPO_ROOT, get_settings
 from app.db import career_sessions
 from app.db.models import CareerSession, ResumeFile, ResumeTemplate, RunKind
 from app.db.session import session_scope
@@ -272,6 +272,45 @@ def test_learning_path_success_returns_a_json_ready_path(context, monkeypatch):
     )
     result = run_handlers.learning_path(context(RunKind.LEARNING_PATH, {"skill_gaps": ["docker"]}))
     assert json.loads(json.dumps(result))["path"]["skill_gaps"] == ["docker"]
+
+
+def _path_for(*skills):
+    from app.agents.curriculum_architect import CourseRecommendation, PersonalizedLearningPath
+
+    courses = [
+        CourseRecommendation(skill_name=s, course_title="T", course_url="u", description="d")
+        for s in skills
+    ]
+    return PersonalizedLearningPath(
+        user_summary="s", skill_gaps=list(skills), recommendations=courses
+    )
+
+
+def _learning_path(context, monkeypatch, gaps, path):
+    monkeypatch.setattr(
+        run_handlers.curriculum_architect,
+        "build_learning_path",
+        lambda gaps, inventory, on_step: {"draft_path": path},
+    )
+    return run_handlers.learning_path(context(RunKind.LEARNING_PATH, {"skill_gaps": gaps}))
+
+
+def test_learning_path_lists_the_gaps_it_found_no_course_for(context, monkeypatch):
+    gaps = ["kubernetes", "docker", "communication", "go"]
+    result = _learning_path(context, monkeypatch, gaps, _path_for("docker"))
+    assert result["gaps_without_courses"] == ["kubernetes", "go"]
+
+
+def test_learning_path_says_web_search_is_off_without_a_tavily_key(context, monkeypatch):
+    result = _learning_path(context, monkeypatch, ["go"], _path_for("go"))
+    assert result["web_search_enabled"] is False
+
+
+def test_learning_path_says_web_search_is_on_with_a_tavily_key(context, monkeypatch):
+    monkeypatch.setenv("TAVILY_API_KEY", "tvly-test")
+    get_settings.cache_clear()
+    result = _learning_path(context, monkeypatch, ["go"], _path_for("go"))
+    assert result["web_search_enabled"] is True
 
 
 def test_compile_failure_message_is_reported(context, fake_generation, monkeypatch):

@@ -6,6 +6,7 @@ export type Session = components["schemas"]["SessionOut"];
 export type Run = components["schemas"]["RunOut"];
 export type RunKind = components["schemas"]["RunKind"];
 export type RunStatus = components["schemas"]["RunStatus"];
+export type CompanyFocus = NonNullable<components["schemas"]["InterviewCreate"]["company_focus"]>;
 export type Interview = components["schemas"]["InterviewOut"];
 export type Turn = components["schemas"]["TurnOut"];
 export type Template = components["schemas"]["TemplateOut"];
@@ -48,8 +49,10 @@ export function unwrap<T>(result: { data?: T; error?: unknown; response: Respons
   return result.data as T;
 }
 
-export function runUrl(sessionId: string, runId: string, file: "resume.tex" | "resume.pdf") {
-  return `${API_URL}/api/v1/sessions/${sessionId}/runs/${runId}/${file}`;
+/** The resume a run wrote, as a PDF (shown in the page unless `download`) or its LaTeX. */
+export function resumeUrl(sessionId: string, runId: string, format: "pdf" | "tex", { download = false } = {}) {
+  const query = new URLSearchParams({ format, ...(download ? { download: "true" } : {}) });
+  return `${API_URL}/api/v1/sessions/${sessionId}/runs/${runId}/resume?${query}`;
 }
 
 export function runEventsUrl(sessionId: string, runId: string) {
@@ -63,10 +66,11 @@ export async function postForm<T>(path: string, form: FormData): Promise<T> {
   return unwrap<T>({ data: body, error: response.ok ? undefined : body, response });
 }
 
+/** Start a run that reads a resume file: skill extraction, or a review (with an optional request). */
 export function uploadResume(sessionId: string, file: File, kind: "skills" | "review", request = "") {
   const form = new FormData();
+  form.append("kind", kind === "skills" ? "skills_from_resume" : "resume_review");
   form.append("file", file);
   if (kind === "review") form.append("request", request);
-  const endpoint = kind === "skills" ? "skills/resume" : "resume-review";
-  return postForm<Run>(`/api/v1/sessions/${sessionId}/runs/${endpoint}`, form);
+  return postForm<Run>(`/api/v1/sessions/${sessionId}/runs`, form);
 }

@@ -9,7 +9,7 @@ from statistics import mean
 
 from app.db.seed_templates import PREDEFINED_TAGS
 from evals.core import load_data
-from evals.tasks.interview import GRADE_ORDER, score_grade
+from evals.tasks.interview import GRADE_ORDER, decided_by_the_model, score_grade
 from evals.tasks.skills import score_tags
 
 MAX_CONSTANT_TAGS = 2  # constant answers of one or two tags
@@ -55,7 +55,8 @@ def _label_floor(task: str, labels: list, answers: dict[str, object]) -> dict:
 
 
 def decision_floor() -> dict:
-    labels = [case["expected"] for case in load_data("interview")["follow_up_decision"]]
+    cases = load_data("interview")["follow_up_decision"]
+    labels = [case["expected"] for case in cases if decided_by_the_model(case)]
     answers = {"always FOLLOW_UP": "FOLLOW_UP", "always NEW_QUESTION": "NEW_QUESTION"}
     return _label_floor("follow_up_decision", labels, answers)
 

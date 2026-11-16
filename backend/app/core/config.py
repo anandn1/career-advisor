@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Annotated, Literal
 
 from pydantic import AliasChoices, Field, SecretStr, field_validator, model_validator
-from pydantic_core import PydanticUseDefault
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -17,14 +16,18 @@ EMBEDDING_MODEL_SUBDIR = Path("models", "embeddinggemma-300m-onnx")  # inside da
 # For reasoning models such as gpt-oss; "none" for models without reasoning.
 ReasoningEffort = Literal["low", "medium", "high"]
 
-
-def _trimmed_or_default(value):
-    """A string without surrounding spaces; blank, like empty, means unset."""
-    if not isinstance(value, str):
-        return value
-    if not value.strip():
-        raise PydanticUseDefault
-    return value.strip()
+# Padding would only fail later: a key as a rejected request, a model name as a 404 from
+# Groq, a path as a folder whose name starts with spaces.
+TRIMMED_SETTINGS = (
+    "groq_api_key",
+    "database_url",
+    "cohere_api_key",
+    "tavily_api_key",
+    "github_access_token",
+    "llm_model",
+    "resume_llm_model",
+    "embedding_model_dir",
+)
 
 
 class Settings(BaseSettings):
@@ -72,28 +75,33 @@ class Settings(BaseSettings):
             self.embedding_model_dir = self.data_dir / EMBEDDING_MODEL_SUBDIR
         return self
 
-    @field_validator("embedding_model_dir", mode="before")
+    @model_validator(mode="before")
     @classmethod
-    def _trim_path(cls, value):
-        """A blank path would be read as a folder named by its spaces."""
-        return _trimmed_or_default(value)
+    def _blank_means_unset(cls, values):
+        """A blank setting counts as unset, like an empty one: required settings are reported
+        missing and the rest keep their defaults."""
+        if not isinstance(values, dict):
+            return values
+        return {
+            name: value
+            for name, value in values.items()
+            if not (isinstance(value, str) and not value.strip())
+        }
+
+    @field_validator(*TRIMMED_SETTINGS, mode="before")
+    @classmethod
+    def _trim(cls, value):
+        return value.strip() if isinstance(value, str) else value
 
     @field_validator("llm_reasoning_effort", "resume_llm_reasoning_effort", mode="before")
     @classmethod
     def _normalise_effort(cls, value):
         """Case and spaces don't matter; "none" sends a null effort, which Groq accepts for
         models without reasoning (they reject "low")."""
-        value = _trimmed_or_default(value)
         if not isinstance(value, str):
             return value
-        value = value.lower()
+        value = value.strip().lower()
         return None if value == "none" else value
-
-    @field_validator("llm_model", "resume_llm_model", mode="before")
-    @classmethod
-    def _trim_model(cls, value):
-        """A padded or blank model name would only fail later, as a 404 from Groq."""
-        return _trimmed_or_default(value)
 
     @field_validator("cors_origins", mode="before")
     @classmethod

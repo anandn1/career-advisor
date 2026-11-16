@@ -30,6 +30,7 @@ CACHED_FACTORIES = (
     db_session.get_engine,
     db_session._session_factory,
     eval_judge.get_judge,
+    interview_coach._topic_names_by_company,
 )
 OPTIONAL_KEYS = (
     "COHERE_API_KEY",

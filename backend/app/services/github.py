@@ -10,6 +10,7 @@ import binascii
 import logging
 import re
 from concurrent.futures import ThreadPoolExecutor
+from http import HTTPStatus
 from urllib.parse import urlparse
 
 import requests
@@ -48,23 +49,39 @@ def parse_username(text: str) -> str:
     return validate_username(value)
 
 
-def _headers() -> dict[str, str]:
-    headers = {"Accept": "application/vnd.github+json"}
+# A token GitHub has turned down (expired or revoked): later requests go without it.
+_rejected_token: str | None = None
+
+
+def _usable_token() -> str | None:
     token = get_settings().github_access_token
+    value = token.get_secret_value() if token else None
+    return None if value == _rejected_token else value
+
+
+def _request(url: str, params: dict | None, token: str | None) -> requests.Response:
+    headers = {"Accept": "application/vnd.github+json"}
     if token:
-        headers["Authorization"] = f"Bearer {token.get_secret_value()}"
-    return headers
+        headers["Authorization"] = f"Bearer {token}"
+    return requests.get(url, headers=headers, params=params, timeout=REQUEST_TIMEOUT_SECONDS)
 
 
 def _get_json(url: str, params: dict | None = None):
-    """GET a GitHub API URL; returns None (and logs) on any failure."""
+    """GET a GitHub API URL; returns None (and logs) on any failure.
+
+    Public data needs no token, so when GitHub rejects the token the request is made again
+    without it (and so are later ones), with a lower rate limit."""
+    global _rejected_token
     if not url.startswith(f"{API_ROOT}/"):
         logger.warning("Refusing non-GitHub-API URL %s", url)
         return None
     try:
-        response = requests.get(
-            url, headers=_headers(), params=params, timeout=REQUEST_TIMEOUT_SECONDS
-        )
+        token = _usable_token()
+        response = _request(url, params, token)
+        if response.status_code == HTTPStatus.UNAUTHORIZED and token:
+            logger.warning("GitHub rejected GITHUB_ACCESS_TOKEN; continuing without it")
+            _rejected_token = token
+            response = _request(url, params, None)
         response.raise_for_status()
         return response.json()
     except requests.RequestException as error:

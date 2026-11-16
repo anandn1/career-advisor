@@ -61,9 +61,9 @@ async function importBackground(sessionId: string, background: Background, file:
     await uploadResume(sessionId, file, "skills");
   } else if (background === "github" && github.trim()) {
     unwrap(
-      await api.POST("/api/v1/sessions/{session_id}/runs/skills/github", {
+      await api.POST("/api/v1/sessions/{session_id}/runs", {
         params: { path: { session_id: sessionId } },
-        body: { github_username: github.trim() },
+        body: { kind: "skills_from_github", github_username: github.trim() },
       }),
     );
   }

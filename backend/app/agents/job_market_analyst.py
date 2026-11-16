@@ -10,6 +10,7 @@ import re
 from datetime import date
 from functools import cache
 from typing import Any, TypedDict
+from urllib.parse import urlsplit, urlunsplit
 
 from langchain_classic.retrievers.contextual_compression import (
     ContextualCompressionRetriever,
@@ -20,6 +21,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
+from app.agents import skill_names
 from app.core.config import get_settings
 from app.core.graphs import StepCallback, run_graph
 from app.core.resources import get_chroma, get_reranker
@@ -123,6 +125,16 @@ def _title_from(document: Document) -> str:
     return match.group(1).strip().title() if match else DEFAULT_TITLE
 
 
+def _posting_url(link: str | None) -> str | None:
+    """The posting's LinkedIn address without tracking parameters; None for anything else,
+    since the web app shows it as a link."""
+    parts = urlsplit(link or "")
+    host = parts.hostname or ""
+    if parts.scheme != "https" or not (host == "linkedin.com" or host.endswith(".linkedin.com")):
+        return None
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, "", ""))
+
+
 def _document_to_job(document: Document) -> dict:
     return {
         "title": _title_from(document),
@@ -131,6 +143,7 @@ def _document_to_job(document: Document) -> dict:
         "skills_required": _cached_skills(document),
         "source": "cached",
         "scraped_at": document.metadata.get("scraped_at"),
+        "url": _posting_url(document.metadata.get("source")),
     }
 
 
@@ -174,6 +187,7 @@ def _scrape_posting(summary: dict) -> tuple[dict, Document] | None:
         "skills_required": details.get("skills required", []),
         "source": "live",
         "scraped_at": date.today().isoformat(),
+        "url": _posting_url(summary["link"]),
     }
     return job, _posting_to_document(posting)
 
@@ -196,38 +210,46 @@ def scrape_fresh_postings(state: JobMarketState) -> JobMarketState:
     return {"job_data": _dedupe_jobs(live_jobs + state.get("job_data", []))}
 
 
-def _normalize_skill(skill: str) -> str:
-    return re.sub(r"[\s-]+", " ", skill.lower().strip(".,;-"))
-
-
 def analyze_skill_gaps(state: JobMarketState) -> JobMarketState:
-    """Compare the skills each posting asks for with the user's skills."""
+    """Compare the skills each posting asks for with the user's skills.
+
+    Soft skills and skills the user already covers are not gaps; the gaps that most postings
+    ask for come first, since later steps cover only the first few.
+    """
     jobs = state.get("job_data", [])
-    user_skills = {_normalize_skill(s) for s in state.get("user_skills", [])}
+    user_skills = state.get("user_skills", [])
+    groups = skill_names.group_skills([s for job in jobs for s in job.get("skills_required") or []])
+    gaps = {
+        name for name in set(groups.values())
+        if not skill_names.is_soft_skill(name) and not skill_names.has_skill(name, user_skills)
+    }  # fmt: skip
+    demand = dict.fromkeys(gaps, 0)
 
     gaps_per_job = []
     for job in jobs:
-        required = {_normalize_skill(s) for s in job.get("skills_required", []) if s}
-        gaps = sorted(required - user_skills)
+        asked = {
+            groups.get(skill_names.normalize_skill(s)) for s in job.get("skills_required") or []
+        }
+        job_gaps = sorted(asked & gaps)
+        for gap in job_gaps:
+            demand[gap] += 1
         gaps_per_job.append(
             {
                 "title": job.get("title", "N/A"),
                 "company": job.get("company", "N/A"),
-                "gaps": gaps,
-                "gap_count": len(gaps),
+                "gaps": job_gaps,
+                "gap_count": len(job_gaps),
             }
         )
 
-    all_required = sorted(
-        {_normalize_skill(s) for job in jobs for s in job.get("skills_required", []) if s}
-    )
+    all_required = sorted(groups)
     total_gaps = sum(job["gap_count"] for job in gaps_per_job)
     analysis = {
         "role": state["role"],
         "location": state["location"],
         "user_current_skills": state.get("user_skills", []),
         "all_required_skills": all_required,
-        "skill_gaps": [skill for skill in all_required if skill not in user_skills],
+        "skill_gaps": sorted(gaps, key=lambda gap: (-demand[gap], gap)),
         "gaps_per_job": gaps_per_job,
         "average_gaps_per_job": round(total_gaps / len(jobs), 1) if jobs else 0,
     }
@@ -257,7 +279,10 @@ def initial_state(role: str, location: str, user_skills: list[str]) -> JobMarket
 
 
 def run_job_market_analysis(
-    role: str, location: str, user_skills: list[str], on_step: StepCallback | None = None
+    role: str,
+    location: str,
+    user_skills: list[str],
+    on_step: StepCallback | None = None,
 ) -> JobMarketState:
     """Run the whole pipeline and return the final state (job_data, skill_gap_data)."""
     state = initial_state(role, location, user_skills)

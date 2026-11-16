@@ -28,6 +28,8 @@ def load_data(name: str) -> dict:
 PASSING_JUDGE_SCORE = 0.75
 MIN_CRITERION_SCORE = 3  # out of 5: one bad aspect, e.g. an invented fact, fails the case
 RATE_LIMITED = "rate limited, not scored"
+# The app answered without asking the model, so the case says nothing about the model.
+DECIDED_BY_APP = "decided by the app's own rules, not scored"
 MAX_ERROR_CHARS = 500
 
 
@@ -48,6 +50,7 @@ class Outcome:
     score: float | None
     passed: bool
     details: dict = field(default_factory=dict)
+    unscored_reason: str | None = None  # e.g. DECIDED_BY_APP; leaves score None
 
 
 @dataclass
@@ -98,6 +101,8 @@ class TaskContext:
             outcome = Outcome(None, False, outcome.details)
             reason = error or f"{usage.rate_limited_calls} call(s) refused"
             error = f"{RATE_LIMITED}: {reason}"
+        elif outcome.unscored_reason:
+            error = outcome.unscored_reason
         elif outcome.score is None and self.run > 1:
             error = "not judged: only the first run of each model is judged"
         elif outcome.score is None:

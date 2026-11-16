@@ -59,8 +59,8 @@ describe("StartForm", () => {
     await user.click(screen.getByRole("button", { name: "Start the route" }));
     await waitFor(() => expect(push).toHaveBeenCalled());
     const github = requests(fetchMock)[1];
-    expect(github.path).toBe("/api/v1/sessions/s1/runs/skills/github");
-    expect(await github.request.json()).toEqual({ github_username: "octocat" });
+    expect(github.path).toBe("/api/v1/sessions/s1/runs");
+    expect(await github.request.json()).toEqual({ kind: "skills_from_github", github_username: "octocat" });
   });
 
   it("uploads the chosen resume", async () => {
@@ -71,7 +71,9 @@ describe("StartForm", () => {
     await user.upload(screen.getByLabelText(/PDF, DOCX or TXT/), new File(["cv"], "cv.txt", { type: "text/plain" }));
     await user.click(screen.getByRole("button", { name: "Start the route" }));
     await waitFor(() => expect(push).toHaveBeenCalled());
-    expect(requests(fetchMock)[1].path).toBe("/api/v1/sessions/s1/runs/skills/resume");
+    const upload = requests(fetchMock)[1];
+    expect(upload.path).toBe("/api/v1/sessions/s1/runs");
+    expect((await upload.request.formData()).get("kind")).toBe("skills_from_resume");
   });
 
   it("shows the server's message and stays on the page when the request is rejected", async () => {
@@ -107,8 +109,8 @@ describe("StartForm", () => {
     await waitFor(() => expect(push).toHaveBeenCalledWith("/s/s1/skills"));
     expect(requests(fetchMock).map((r) => `${r.method} ${r.path}`)).toEqual([
       "POST /api/v1/sessions",
-      "POST /api/v1/sessions/s1/runs/skills/github",
-      "POST /api/v1/sessions/s1/runs/skills/github",
+      "POST /api/v1/sessions/s1/runs",
+      "POST /api/v1/sessions/s1/runs",
     ]);
   });
 
@@ -131,9 +133,9 @@ describe("StartForm", () => {
     const sent = requests(fetchMock);
     expect(sent.map((r) => `${r.method} ${r.path}`)).toEqual([
       "POST /api/v1/sessions",
-      "POST /api/v1/sessions/s1/runs/skills/github",
+      "POST /api/v1/sessions/s1/runs",
       "PATCH /api/v1/sessions/s1",
-      "POST /api/v1/sessions/s1/runs/skills/github",
+      "POST /api/v1/sessions/s1/runs",
     ]);
     expect(await sent[2].request.json()).toEqual({ target_role: "Backend developer", location: "Remote" });
   });

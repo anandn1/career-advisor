@@ -1,5 +1,5 @@
 {
-  "about": "Interview coach. 'grading': answers written to a known quality; a model's grade is scored exactly and within one step (bad < moderate < good < excellent). 'follow_up_decision': cases the router sees (only bad or moderate grades reach it) with the clearly right choice. 'follow_up_questions' and 'summaries' are scored by the judge.",
+  "about": "Interview coach. 'grading': answers written to a known quality; a model's grade is scored exactly and within one step (bad < moderate < good < excellent). 'follow_up_decision': cases the router sees (only bad or moderate grades reach it) with the clearly right choice; a bad answer on the right track (one key mistake) gets a follow-up, a plainly wrong one does not. Cases the app decides by itself (no answer, or 'I don't know') are run but not scored. 'follow_up_questions' and 'summaries' are scored by the judge.",
   "grading": [
     {
       "id": "deadlock-excellent",
@@ -144,6 +144,62 @@
       "expected": "NEW_QUESTION",
       "question": "What is a thread? How is it different from a process?",
       "answer": "No idea, honestly. Can you just tell me the answer and move on?"
+    },
+    {
+      "id": "binary-search-wrong",
+      "grade": "bad",
+      "expected": "NEW_QUESTION",
+      "question": "What is the time complexity of binary search, and why?",
+      "answer": "It is O(n squared), because it compares every pair of elements to find the target."
+    },
+    {
+      "id": "rest-wrong",
+      "grade": "bad",
+      "expected": "NEW_QUESTION",
+      "question": "What makes an API RESTful?",
+      "answer": "REST means the server rests between requests to save CPU, so you add sleep calls to each endpoint."
+    },
+    {
+      "id": "deadlock-wrong",
+      "grade": "bad",
+      "expected": "NEW_QUESTION",
+      "question": "What is a deadlock?",
+      "answer": "A deadlock is when the database deletes locked rows so that it can free up memory."
+    },
+    {
+      "id": "hash-map-wrong",
+      "grade": "bad",
+      "expected": "NEW_QUESTION",
+      "question": "How does a hash map find the value for a key?",
+      "answer": "It sorts all the keys alphabetically, then reads them one by one from the start until it reaches the key."
+    },
+    {
+      "id": "index-salvageable",
+      "grade": "bad",
+      "expected": "FOLLOW_UP",
+      "question": "What does a database index do?",
+      "answer": "It is a B-tree that keeps the table's rows sorted, so every insert and update gets faster."
+    },
+    {
+      "id": "lru-salvageable",
+      "grade": "bad",
+      "expected": "FOLLOW_UP",
+      "question": "How does an LRU cache decide what to evict?",
+      "answer": "It evicts the item that was added first, using a queue of insert times."
+    },
+    {
+      "id": "dns-wrong",
+      "grade": "bad",
+      "expected": "NEW_QUESTION",
+      "question": "What does DNS do?",
+      "answer": "DNS encrypts web pages so that hackers cannot read them."
+    },
+    {
+      "id": "garbage-collection-wrong",
+      "grade": "bad",
+      "expected": "NEW_QUESTION",
+      "question": "What is garbage collection?",
+      "answer": "It is when the operating system empties the recycle bin every night."
     }
   ],
   "follow_up_questions": [

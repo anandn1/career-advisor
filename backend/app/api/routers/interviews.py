@@ -7,7 +7,14 @@ from fastapi import APIRouter, HTTPException, status
 
 from app.agents import interview_coach
 from app.api.deps import CurrentSession, Db
-from app.api.schemas import AnswerRequest, InterviewCreate, InterviewOut, TurnOut
+from app.api.schemas import (
+    AnswerRequest,
+    CompanyFocus,
+    InterviewCreate,
+    InterviewOut,
+    InterviewTopicsOut,
+    TurnOut,
+)
 from app.db import career_sessions
 from app.db.models import AgentRun, CareerSession, RunKind, RunStatus, utcnow
 
@@ -15,12 +22,33 @@ logger = logging.getLogger(__name__)
 UNAVAILABLE = "The interview service is temporarily unavailable. Please try again."
 
 router = APIRouter(prefix="/sessions/{session_id}/interviews", tags=["interviews"])
+topics_router = APIRouter(prefix="/sessions/{session_id}/interview-topics", tags=["interviews"])
 
 
-def _default_topics(db, career_session: CareerSession) -> list[str]:
+def _default_topics(db, career_session: CareerSession, company_focus: str) -> list[str]:
     analysis_run = career_sessions.latest_succeeded_run(db, career_session.id, RunKind.JOB_MARKET)
     analysis = (analysis_run.result or {}).get("analysis", {}) if analysis_run else {}
-    return interview_coach.topics_for_skill_gaps(analysis.get("skill_gaps", []))
+    return interview_coach.topics_for_skill_gaps(analysis.get("skill_gaps", []), company_focus)
+
+
+def _chosen_topics(topics: list[str], company_focus: str) -> list[str]:
+    found, unknown = interview_coach.resolve_topics(topics, company_focus)
+    if unknown:
+        available = ", ".join(interview_coach.interview_topics(company_focus))
+        where = "interview" if company_focus == "all" else company_focus
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            f"No {where} questions on: {', '.join(unknown)}. Choose from: {available}",
+        )
+    return found
+
+
+@topics_router.get("", response_model=InterviewTopicsOut)
+def list_topics(career_session: CurrentSession, db: Db, company_focus: CompanyFocus = "generic"):
+    return InterviewTopicsOut(
+        topics=interview_coach.interview_topics(company_focus),
+        suggested=_default_topics(db, career_session, company_focus),
+    )
 
 
 def _out(run: AgentRun, turn: interview_coach.InterviewTurn | None = None) -> InterviewOut:
@@ -49,7 +77,10 @@ def _record_turn(run: AgentRun, turn: interview_coach.InterviewTurn) -> None:
 
 @router.post("", status_code=status.HTTP_201_CREATED, response_model=InterviewOut)
 def start_interview(body: InterviewCreate, career_session: CurrentSession, db: Db):
-    topics = body.topics or _default_topics(db, career_session)
+    if body.topics:
+        topics = _chosen_topics(body.topics, body.company_focus)
+    else:
+        topics = _default_topics(db, career_session, body.company_focus)
     run_input = {"company_focus": body.company_focus, "topics": topics}
     run = career_sessions.create_run(
         db,
