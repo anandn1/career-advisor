@@ -43,6 +43,23 @@ export interface paths {
         patch: operations["update_session_api_v1_sessions__session_id__patch"];
         trace?: never;
     };
+    "/api/v1/sessions/{session_id}/interview-topics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Topics */
+        get: operations["list_topics_api_v1_sessions__session_id__interview_topics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sessions/{session_id}/interviews": {
         parameters: {
             query?: never;
@@ -124,126 +141,11 @@ export interface paths {
         /** List Runs */
         get: operations["list_runs_api_v1_sessions__session_id__runs_get"];
         put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/sessions/{session_id}/runs/job-market": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Analyze Job Market */
-        post: operations["analyze_job_market_api_v1_sessions__session_id__runs_job_market_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/sessions/{session_id}/runs/learning-path": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Build Learning Path */
-        post: operations["build_learning_path_api_v1_sessions__session_id__runs_learning_path_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/sessions/{session_id}/runs/resume": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Generate Resume */
-        post: operations["generate_resume_api_v1_sessions__session_id__runs_resume_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/sessions/{session_id}/runs/resume-render": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Rerender Resume */
-        post: operations["rerender_resume_api_v1_sessions__session_id__runs_resume_render_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/sessions/{session_id}/runs/resume-review": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Review Resume */
-        post: operations["review_resume_api_v1_sessions__session_id__runs_resume_review_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/sessions/{session_id}/runs/skills/github": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Extract Skills From Github */
-        post: operations["extract_skills_from_github_api_v1_sessions__session_id__runs_skills_github_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/sessions/{session_id}/runs/skills/resume": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Extract Skills From Resume */
-        post: operations["extract_skills_from_resume_api_v1_sessions__session_id__runs_skills_resume_post"];
+        /**
+         * Start Run
+         * @description Start a run of any kind: JSON picked by "kind", or a form for a resume file.
+         */
+        post: operations["start_run_api_v1_sessions__session_id__runs_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -289,32 +191,18 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/sessions/{session_id}/runs/{run_id}/resume.pdf": {
+    "/api/v1/sessions/{session_id}/runs/{run_id}/resume": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Download Resume Pdf */
-        get: operations["download_resume_pdf_api_v1_sessions__session_id__runs__run_id__resume_pdf_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/sessions/{session_id}/runs/{run_id}/resume.tex": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Download Resume Latex */
-        get: operations["download_resume_latex_api_v1_sessions__session_id__runs__run_id__resume_tex_get"];
+        /**
+         * Download Resume
+         * @description The resume a run wrote: the PDF (shown in the page unless `download`) or its LaTeX.
+         */
+        get: operations["download_resume_api_v1_sessions__session_id__runs__run_id__resume_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -365,21 +253,6 @@ export interface components {
         AnswerRequest: {
             /** Answer */
             answer: string;
-        };
-        /** Body_extract_skills_from_resume_api_v1_sessions__session_id__runs_skills_resume_post */
-        Body_extract_skills_from_resume_api_v1_sessions__session_id__runs_skills_resume_post: {
-            /** File */
-            file: string;
-        };
-        /** Body_review_resume_api_v1_sessions__session_id__runs_resume_review_post */
-        Body_review_resume_api_v1_sessions__session_id__runs_resume_review_post: {
-            /** File */
-            file: string;
-            /**
-             * Request
-             * @default
-             */
-            request: string;
         };
         /** ContactInfo */
         ContactInfo: {
@@ -440,13 +313,18 @@ export interface components {
              */
             status: string;
         };
-        /** GithubSkillsRequest */
-        GithubSkillsRequest: {
+        /** GithubSkillsRun */
+        GithubSkillsRun: {
             /**
              * Github Username
              * @description Username or URL
              */
             github_username: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "skills_from_github";
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -479,6 +357,35 @@ export interface components {
             topics: string[];
             turn?: components["schemas"]["TurnOut"] | null;
         };
+        /** InterviewTopicsOut */
+        InterviewTopicsOut: {
+            /**
+             * Suggested
+             * @description The topics for this session's skill gaps
+             */
+            suggested: string[];
+            /**
+             * Topics
+             * @description Topics with questions for this company focus
+             */
+            topics: string[];
+        };
+        /** JobMarketRun */
+        JobMarketRun: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "job_market";
+        };
+        /** LearningPathRun */
+        LearningPathRun: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "learning_path";
+        };
         /** Project */
         Project: {
             /** Description Bullets */
@@ -508,14 +415,22 @@ export interface components {
             /** Work Experience */
             work_experience?: components["schemas"]["WorkExperience"][];
         };
-        /** ResumeRenderRequest */
-        ResumeRenderRequest: {
+        /** ResumeRenderRun */
+        ResumeRenderRun: {
             draft: components["schemas"]["ResumeDraft"];
-            /** Template Id */
-            template_id?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "resume_render";
+            /**
+             * Template Id
+             * @default null
+             */
+            template_id: string | null;
         };
-        /** ResumeRequest */
-        ResumeRequest: {
+        /** ResumeRun */
+        ResumeRun: {
             contact?: components["schemas"]["ContactInfo"];
             /** Education */
             education?: components["schemas"]["Education"][];
@@ -526,8 +441,16 @@ export interface components {
              * @default true
              */
             include_github: boolean;
-            /** Template Id */
-            template_id?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "resume";
+            /**
+             * Template Id
+             * @default null
+             */
+            template_id: string | null;
             /** Work Experience */
             work_experience?: components["schemas"]["WorkExperience"][];
         };
@@ -562,11 +485,35 @@ export interface components {
             started_at: string | null;
             status: components["schemas"]["RunStatus"];
         };
+        RunRequest: components["schemas"]["JobMarketRun"] | components["schemas"]["LearningPathRun"] | components["schemas"]["GithubSkillsRun"] | components["schemas"]["ResumeRun"] | components["schemas"]["ResumeRenderRun"];
         /**
          * RunStatus
          * @enum {string}
          */
         RunStatus: "queued" | "running" | "succeeded" | "failed";
+        /**
+         * RunUpload
+         * @description The multipart form for runs that read a resume file.
+         */
+        RunUpload: {
+            /**
+             * File
+             * Format: binary
+             * @description The resume: .pdf, .docx or .txt
+             */
+            file: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "skills_from_resume" | "resume_review";
+            /**
+             * Request
+             * @description For resume_review
+             * @default
+             */
+            request: string;
+        };
         /** SessionCreate */
         SessionCreate: {
             /** Location */
@@ -805,6 +752,39 @@ export interface operations {
             };
         };
     };
+    list_topics_api_v1_sessions__session_id__interview_topics_get: {
+        parameters: {
+            query?: {
+                company_focus?: "amazon" | "apple" | "google" | "meta" | "microsoft" | "netflix" | "nvidia" | "generic" | "all";
+            };
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewTopicsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     start_interview_api_v1_sessions__session_id__interviews_post: {
         parameters: {
             query?: never;
@@ -974,69 +954,7 @@ export interface operations {
             };
         };
     };
-    analyze_job_market_api_v1_sessions__session_id__runs_job_market_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RunOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    build_learning_path_api_v1_sessions__session_id__runs_learning_path_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RunOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    generate_resume_api_v1_sessions__session_id__runs_resume_post: {
+    start_run_api_v1_sessions__session_id__runs_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -1047,147 +965,8 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ResumeRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RunOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    rerender_resume_api_v1_sessions__session_id__runs_resume_render_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ResumeRenderRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RunOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    review_resume_api_v1_sessions__session_id__runs_resume_review_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "multipart/form-data": components["schemas"]["Body_review_resume_api_v1_sessions__session_id__runs_resume_review_post"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RunOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    extract_skills_from_github_api_v1_sessions__session_id__runs_skills_github_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["GithubSkillsRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RunOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    extract_skills_from_resume_api_v1_sessions__session_id__runs_skills_resume_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "multipart/form-data": components["schemas"]["Body_extract_skills_from_resume_api_v1_sessions__session_id__runs_skills_resume_post"];
+                "application/json": components["schemas"]["RunRequest"];
+                "multipart/form-data": components["schemas"]["RunUpload"];
             };
         };
         responses: {
@@ -1277,43 +1056,12 @@ export interface operations {
             };
         };
     };
-    download_resume_pdf_api_v1_sessions__session_id__runs__run_id__resume_pdf_get: {
+    download_resume_api_v1_sessions__session_id__runs__run_id__resume_get: {
         parameters: {
             query?: {
+                format?: "pdf" | "tex";
                 download?: boolean;
             };
-            header?: never;
-            path: {
-                run_id: string;
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    download_resume_latex_api_v1_sessions__session_id__runs__run_id__resume_tex_get: {
-        parameters: {
-            query?: never;
             header?: never;
             path: {
                 run_id: string;

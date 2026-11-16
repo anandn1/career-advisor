@@ -197,7 +197,7 @@ def test_patch_leaves_unspecified_fields_alone(client, session_id):
 
 
 def test_deleting_a_session_removes_it_and_its_runs(client, session_id):
-    run_id = client.post(run_url(session_id, "/job-market")).json()["id"]
+    run_id = client.post(run_url(session_id), json={"kind": "job_market"}).json()["id"]
     assert client.delete(f"{API}/sessions/{session_id}").status_code == 204
     assert client.get(f"{API}/sessions/{session_id}").status_code == 404
     with session_scope() as db:
@@ -208,7 +208,7 @@ def test_deleting_a_session_removes_it_and_its_runs(client, session_id):
 
 
 def test_job_market_run_is_accepted_and_executed(client, session_id):
-    response = client.post(run_url(session_id, "/job-market"))
+    response = client.post(run_url(session_id), json={"kind": "job_market"})
     assert (
         response.status_code == 202 and stored_run(response.json()["id"]).status == Status.SUCCEEDED
     )
@@ -216,7 +216,7 @@ def test_job_market_run_is_accepted_and_executed(client, session_id):
 
 def test_run_result_is_returned_by_the_run_endpoint(client, session_id, handlers):
     handlers[RunKind.JOB_MARKET] = ok_handler({"analysis": {"skill_gaps": ["docker"]}})
-    run_id = client.post(run_url(session_id, "/job-market")).json()["id"]
+    run_id = client.post(run_url(session_id), json={"kind": "job_market"}).json()["id"]
     assert client.get(run_url(session_id, f"/{run_id}")).json()["result"] == {
         "analysis": {"skill_gaps": ["docker"]}
     }
@@ -231,13 +231,13 @@ def test_a_second_unfinished_run_of_the_same_kind_conflicts(engine, handlers, mo
         sid = client.post(
             f"{API}/sessions", json={"target_role": "Dev", "location": "Pune"}
         ).json()["id"]
-        assert client.post(run_url(sid, "/job-market")).status_code == 202
-        assert client.post(run_url(sid, "/job-market")).status_code == 409
+        assert client.post(run_url(sid), json={"kind": "job_market"}).status_code == 202
+        assert client.post(run_url(sid), json={"kind": "job_market"}).status_code == 409
 
 
 def test_finished_runs_do_not_block_new_ones(client, session_id):
-    client.post(run_url(session_id, "/job-market"))
-    assert client.post(run_url(session_id, "/job-market")).status_code == 202
+    client.post(run_url(session_id), json={"kind": "job_market"})
+    assert client.post(run_url(session_id), json={"kind": "job_market"}).status_code == 202
 
 
 def test_different_kinds_can_run_together(engine, handlers, monkeypatch):
@@ -249,23 +249,104 @@ def test_different_kinds_can_run_together(engine, handlers, monkeypatch):
         sid = client.post(
             f"{API}/sessions", json={"target_role": "Dev", "location": "Pune"}
         ).json()["id"]
-        client.post(run_url(sid, "/job-market"))
+        client.post(run_url(sid), json={"kind": "job_market"})
         assert (
             client.post(
-                run_url(sid, "/skills/github"), json={"github_username": "octocat"}
+                run_url(sid), json={"kind": "skills_from_github", "github_username": "octocat"}
             ).status_code
             == 202
         )
 
 
+# --- One endpoint starts every kind of run ---
+
+
+@pytest.mark.parametrize(
+    "body",
+    [{}, {"kind": "astrology"}, {"kind": "interview"}, {"kind": "skills_from_resume"}],
+    ids=["no kind", "unknown kind", "interviews have their own endpoint", "needs a form"],
+)
+def test_a_json_run_needs_a_kind_that_takes_json(client, session_id, body):
+    response = client.post(run_url(session_id), json=body)
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["loc"][0] == "body"
+    assert client.get(run_url(session_id)).json() == []
+
+
+def test_a_json_run_reports_bad_fields_under_its_kind(client, session_id):
+    response = client.post(run_url(session_id), json={"kind": "skills_from_github"})
+    locs = [error["loc"] for error in response.json()["detail"]]
+    assert response.status_code == 422 and locs == [
+        ["body", "skills_from_github", "github_username"]
+    ]
+
+
+def test_broken_json_is_rejected(client, session_id):
+    response = client.post(
+        run_url(session_id), content=b"{kind:", headers={"Content-Type": "application/json"}
+    )
+    assert response.status_code == 422
+
+
+def test_a_run_body_that_is_neither_json_nor_a_form_is_unsupported(client, session_id):
+    response = client.post(
+        run_url(session_id), content=b"job_market", headers={"Content-Type": "text/plain"}
+    )
+    assert response.status_code == 415
+    assert response.json()["detail"] == "Send JSON, or a multipart form to upload a resume"
+
+
+@pytest.mark.parametrize("kind", ["job_market", "interview", "", None])
+def test_a_form_run_must_be_one_that_reads_a_file(client, session_id, kind):
+    data = {"kind": kind} if kind is not None else {}
+    response = client.post(run_url(session_id), data=data, files=upload())
+    assert response.status_code == 422
+    assert response.json()["detail"] == (
+        "A form upload needs a kind of: skills_from_resume, resume_review"
+    )
+
+
+def test_a_form_run_needs_the_file(client, session_id):
+    response = client.post(
+        run_url(session_id), data={"kind": "skills_from_resume"}, files={"other": ("x", b"x")}
+    )
+    assert (response.status_code, response.json()["detail"]) == (
+        422,
+        "Attach the resume as 'file'",
+    )
+
+
+def test_the_old_action_paths_are_gone(client, session_id):
+    for path in ("/job-market", "/learning-path", "/skills/github", "/resume-review"):
+        assert client.post(run_url(session_id, path), json={}).status_code in (404, 405)
+    assert client.get(f"{API}/sessions/{session_id}/interviews/topics").status_code == 404
+
+
+def test_the_api_description_lists_both_kinds_of_run_body(client):
+    spec = client.get("/openapi.json").json()
+    content = spec["paths"][f"{API}/sessions/{{session_id}}/runs"]["post"]["requestBody"]["content"]
+    assert content == {
+        "application/json": {"schema": {"$ref": "#/components/schemas/RunRequest"}},
+        "multipart/form-data": {"schema": {"$ref": "#/components/schemas/RunUpload"}},
+    }
+    schemas = spec["components"]["schemas"]
+    assert set(schemas["RunRequest"]["discriminator"]["mapping"]) == {
+        "job_market", "learning_path", "resume", "resume_render", "skills_from_github",
+    }  # fmt: skip
+    assert schemas["RunUpload"]["properties"]["kind"]["enum"] == [
+        "skills_from_resume",
+        "resume_review",
+    ]
+
+
 def test_runs_cannot_be_started_for_an_unknown_session(client):
-    assert client.post(run_url("missing", "/job-market")).status_code == 404
+    assert client.post(run_url("missing"), json={"kind": "job_market"}).status_code == 404
 
 
 def test_github_skills_run_stores_the_parsed_username(client, session_id):
     run_id = client.post(
-        run_url(session_id, "/skills/github"),
-        json={"github_username": "https://github.com/octocat/"},
+        run_url(session_id),
+        json={"kind": "skills_from_github", "github_username": "https://github.com/octocat/"},
     ).json()["id"]
     assert stored_run(run_id).input == {"github_username": "octocat"}
 
@@ -273,18 +354,18 @@ def test_github_skills_run_stores_the_parsed_username(client, session_id):
 @pytest.mark.parametrize("username", ["../etc", "https://gitlab.com/octocat", "a b"])
 def test_invalid_github_usernames_are_rejected(client, session_id, username):
     response = client.post(
-        run_url(session_id, "/skills/github"), json={"github_username": username}
+        run_url(session_id), json={"kind": "skills_from_github", "github_username": username}
     )
     assert response.status_code == 422
 
 
 def test_learning_path_needs_a_job_market_analysis_first(client, session_id):
-    assert client.post(run_url(session_id, "/learning-path")).status_code == 409
+    assert client.post(run_url(session_id), json={"kind": "learning_path"}).status_code == 409
 
 
 def test_learning_path_needs_skill_gaps(client, session_id):
     add_run(session_id, RunKind.JOB_MARKET, result={"analysis": {"skill_gaps": []}})
-    assert client.post(run_url(session_id, "/learning-path")).status_code == 409
+    assert client.post(run_url(session_id), json={"kind": "learning_path"}).status_code == 409
 
 
 def test_learning_path_uses_the_latest_analysis_gaps(client, session_id):
@@ -293,7 +374,7 @@ def test_learning_path_uses_the_latest_analysis_gaps(client, session_id):
         RunKind.JOB_MARKET,
         result={"analysis": {"skill_gaps": ["docker", "k8s"]}},
     )
-    run_id = client.post(run_url(session_id, "/learning-path")).json()["id"]
+    run_id = client.post(run_url(session_id), json={"kind": "learning_path"}).json()["id"]
     assert stored_run(run_id).input["skill_gaps"] == ["docker", "k8s"]
 
 
@@ -304,44 +385,62 @@ def test_failed_analyses_are_not_used_for_the_learning_path(client, session_id):
         status=Status.FAILED,
         result={"analysis": {"skill_gaps": ["docker"]}},
     )
-    assert client.post(run_url(session_id, "/learning-path")).status_code == 409
+    assert client.post(run_url(session_id), json={"kind": "learning_path"}).status_code == 409
 
 
 # --- Uploads ---
 
 
 def test_resume_upload_text_is_passed_to_the_run(client, session_id):
-    run_id = client.post(run_url(session_id, "/skills/resume"), files=upload()).json()["id"]
+    run_id = client.post(
+        run_url(session_id), data={"kind": "skills_from_resume"}, files=upload()
+    ).json()["id"]
     assert stored_run(run_id).input == {"resume_text": "Python and Docker"}
 
 
 @pytest.mark.parametrize("name", ["cv.doc", "cv.exe", "cv"])
 def test_unsupported_upload_types_are_rejected(client, session_id, name):
-    assert client.post(run_url(session_id, "/skills/resume"), files=upload(name)).status_code == 415
+    assert (
+        client.post(
+            run_url(session_id), data={"kind": "skills_from_resume"}, files=upload(name)
+        ).status_code
+        == 415
+    )
 
 
 def test_uploads_over_the_size_limit_are_rejected(client, session_id, monkeypatch):
     monkeypatch.setenv("MAX_UPLOAD_BYTES", "10")
     main.get_settings.cache_clear()
-    response = client.post(run_url(session_id, "/skills/resume"), files=upload(content=b"x" * 11))
+    response = client.post(
+        run_url(session_id), data={"kind": "skills_from_resume"}, files=upload(content=b"x" * 11)
+    )
     assert response.status_code == 413
 
 
 def test_upload_exactly_at_the_size_limit_is_accepted(client, session_id, monkeypatch):
     monkeypatch.setenv("MAX_UPLOAD_BYTES", "10")
     main.get_settings.cache_clear()
-    response = client.post(run_url(session_id, "/skills/resume"), files=upload(content=b"x" * 10))
+    response = client.post(
+        run_url(session_id), data={"kind": "skills_from_resume"}, files=upload(content=b"x" * 10)
+    )
     assert response.status_code == 202
 
 
 def test_empty_upload_text_is_rejected(client, session_id):
-    response = client.post(run_url(session_id, "/skills/resume"), files=upload(content=b"   \n"))
+    response = client.post(
+        run_url(session_id), data={"kind": "skills_from_resume"}, files=upload(content=b"   \n")
+    )
     assert response.status_code == 422
 
 
 def test_corrupt_upload_is_rejected(client, session_id):
     files = upload("cv.pdf", b"not a pdf", "application/pdf")
-    assert client.post(run_url(session_id, "/skills/resume"), files=files).status_code == 422
+    assert (
+        client.post(
+            run_url(session_id), data={"kind": "skills_from_resume"}, files=files
+        ).status_code
+        == 422
+    )
 
 
 def test_uploaded_files_are_not_kept(client, session_id, monkeypatch):
@@ -355,13 +454,15 @@ def test_uploaded_files_are_not_kept(client, session_id, monkeypatch):
         return real_write(path, data)
 
     monkeypatch.setattr(Path, "write_bytes", recording_write)
-    client.post(run_url(session_id, "/skills/resume"), files=upload())
+    client.post(run_url(session_id), data={"kind": "skills_from_resume"}, files=upload())
     assert written and not any(path.exists() for path in written)
 
 
 def test_resume_review_passes_the_request_text(client, session_id):
     response = client.post(
-        run_url(session_id, "/resume-review"), files=upload(), data={"request": "Focus on impact"}
+        run_url(session_id),
+        files=upload(),
+        data={"kind": "resume_review", "request": "Focus on impact"},
     )
     assert stored_run(response.json()["id"]).input == {
         "resume_text": "Python and Docker",
@@ -371,7 +472,7 @@ def test_resume_review_passes_the_request_text(client, session_id):
 
 def test_overlong_review_requests_are_rejected(client, session_id):
     response = client.post(
-        run_url(session_id, "/resume-review"), files=upload(), data={"request": "x" * 1001}
+        run_url(session_id), files=upload(), data={"kind": "resume_review", "request": "x" * 1001}
     )
     assert response.status_code == 422
 
@@ -382,7 +483,7 @@ def test_overlong_review_requests_are_rejected(client, session_id):
 def test_resume_profile_combines_session_skills_and_extras(client, session_id):
     client.patch(f"{API}/sessions/{session_id}", json={"skills": ["Go", "SQL"]})
     run_id = client.post(
-        run_url(session_id, "/resume"), json={"extra_skills": ["SQL", "Rust"]}
+        run_url(session_id), json={"kind": "resume", "extra_skills": ["SQL", "Rust"]}
     ).json()["id"]
     profile = stored_run(run_id).input["profile"]
     assert (profile["target_role"], profile["skills"]) == (
@@ -394,16 +495,16 @@ def test_resume_profile_combines_session_skills_and_extras(client, session_id):
 def test_resume_uses_the_session_github_user_unless_excluded(client, session_id):
     with session_scope() as db:
         db.get(CareerSession, session_id).github_username = "octocat"
-    with_github = client.post(run_url(session_id, "/resume"), json={}).json()["id"]
-    without = client.post(run_url(session_id, "/resume"), json={"include_github": False}).json()[
-        "id"
-    ]
+    with_github = client.post(run_url(session_id), json={"kind": "resume"}).json()["id"]
+    without = client.post(
+        run_url(session_id), json={"kind": "resume", "include_github": False}
+    ).json()["id"]
     assert stored_run(with_github).input["profile"]["github_username"] == "octocat"
     assert stored_run(without).input["profile"]["github_username"] is None
 
 
 def test_unknown_template_is_rejected(client, session_id):
-    response = client.post(run_url(session_id, "/resume"), json={"template_id": "missing"})
+    response = client.post(run_url(session_id), json={"kind": "resume", "template_id": "missing"})
     assert response.status_code == 422
 
 
@@ -413,7 +514,7 @@ def test_known_template_is_accepted(client, session_id):
         db.add(template)
         db.flush()
         template_id = template.id
-    response = client.post(run_url(session_id, "/resume"), json={"template_id": template_id})
+    response = client.post(run_url(session_id), json={"kind": "resume", "template_id": template_id})
     assert response.status_code == 202
 
 
@@ -426,7 +527,7 @@ def _resume_with_files(session_id, latex="\\documentclass{a}", pdf=b"%PDF-1"):
 
 def test_resume_latex_can_be_downloaded(client, session_id):
     run_id = _resume_with_files(session_id)
-    response = client.get(run_url(session_id, f"/{run_id}/resume.tex"))
+    response = client.get(run_url(session_id, f"/{run_id}/resume?format=tex"))
     assert (
         response.text == "\\documentclass{a}"
         and "attachment" in response.headers["content-disposition"]
@@ -435,7 +536,7 @@ def test_resume_latex_can_be_downloaded(client, session_id):
 
 def test_resume_pdf_is_shown_inline_by_default(client, session_id):
     run_id = _resume_with_files(session_id)
-    response = client.get(run_url(session_id, f"/{run_id}/resume.pdf"))
+    response = client.get(run_url(session_id, f"/{run_id}/resume?format=pdf"))
     assert response.content == b"%PDF-1" and response.headers["content-disposition"].startswith(
         "inline"
     )
@@ -443,18 +544,37 @@ def test_resume_pdf_is_shown_inline_by_default(client, session_id):
 
 def test_resume_pdf_can_be_downloaded(client, session_id):
     run_id = _resume_with_files(session_id)
-    response = client.get(run_url(session_id, f"/{run_id}/resume.pdf"), params={"download": True})
+    response = client.get(
+        run_url(session_id, f"/{run_id}/resume"), params={"format": "pdf", "download": True}
+    )
     assert response.headers["content-disposition"].startswith("attachment")
+
+
+def test_the_resume_is_the_pdf_when_no_format_is_given(client, session_id):
+    run_id = _resume_with_files(session_id)
+    response = client.get(run_url(session_id, f"/{run_id}/resume"))
+    assert (response.content, response.headers["content-type"]) == (b"%PDF-1", "application/pdf")
+
+
+def test_the_latex_resume_has_its_own_media_type(client, session_id):
+    run_id = _resume_with_files(session_id)
+    response = client.get(run_url(session_id, f"/{run_id}/resume?format=tex"))
+    assert response.headers["content-type"].startswith("application/x-tex")
+
+
+def test_an_unknown_resume_format_is_rejected(client, session_id):
+    run_id = _resume_with_files(session_id)
+    assert client.get(run_url(session_id, f"/{run_id}/resume?format=docx")).status_code == 422
 
 
 def test_missing_pdf_is_not_found(client, session_id):
     run_id = _resume_with_files(session_id, pdf=None)
-    assert client.get(run_url(session_id, f"/{run_id}/resume.pdf")).status_code == 404
+    assert client.get(run_url(session_id, f"/{run_id}/resume?format=pdf")).status_code == 404
 
 
 def test_non_resume_runs_have_no_files(client, session_id):
     run_id = add_run(session_id, RunKind.JOB_MARKET)
-    assert client.get(run_url(session_id, f"/{run_id}/resume.tex")).status_code == 404
+    assert client.get(run_url(session_id, f"/{run_id}/resume?format=tex")).status_code == 404
 
 
 def test_another_sessions_run_is_not_visible(client, session_id):
@@ -463,17 +583,21 @@ def test_another_sessions_run_is_not_visible(client, session_id):
     ]
     run_id = _resume_with_files(other)
     assert client.get(run_url(session_id, f"/{run_id}")).status_code == 404
-    assert client.get(run_url(session_id, f"/{run_id}/resume.tex")).status_code == 404
+    assert client.get(run_url(session_id, f"/{run_id}/resume?format=tex")).status_code == 404
 
 
 def test_rerender_accepts_an_edited_draft(client, session_id):
     draft = {"contact": {"name": "Ada"}, "summary": "Edited summary"}
-    run_id = client.post(run_url(session_id, "/resume-render"), json={"draft": draft}).json()["id"]
+    run_id = client.post(
+        run_url(session_id), json={"kind": "resume_render", "draft": draft}
+    ).json()["id"]
     assert stored_run(run_id).input["draft"]["summary"] == "Edited summary"
 
 
 def test_rerender_rejects_a_malformed_draft(client, session_id):
-    response = client.post(run_url(session_id, "/resume-render"), json={"draft": {"summary": 3}})
+    response = client.post(
+        run_url(session_id), json={"kind": "resume_render", "draft": {"summary": 3}}
+    )
     assert response.status_code == 422
 
 
@@ -481,8 +605,10 @@ def test_rerender_rejects_a_malformed_draft(client, session_id):
 
 
 def test_runs_can_be_listed_and_filtered_by_kind(client, session_id):
-    client.post(run_url(session_id, "/job-market"))
-    client.post(run_url(session_id, "/skills/github"), json={"github_username": "octocat"})
+    client.post(run_url(session_id), json={"kind": "job_market"})
+    client.post(
+        run_url(session_id), json={"kind": "skills_from_github", "github_username": "octocat"}
+    )
     kinds = [
         r["kind"] for r in client.get(run_url(session_id), params={"kind": "job_market"}).json()
     ]
@@ -506,7 +632,7 @@ def parse_sse(text):
 
 def test_event_stream_replays_progress_then_done(client, session_id, handlers):
     handlers[RunKind.JOB_MARKET] = ok_handler({"ok": True}, events=("search", "scrape", "analyze"))
-    run_id = client.post(run_url(session_id, "/job-market")).json()["id"]
+    run_id = client.post(run_url(session_id), json={"kind": "job_market"}).json()["id"]
     events = parse_sse(client.get(run_url(session_id, f"/{run_id}/events")).text)
     assert [e["event"] for e in events] == ["progress", "progress", "progress", "done"]
     assert [json.loads(e["data"])["step"] for e in events[:3]] == [
@@ -518,7 +644,7 @@ def test_event_stream_replays_progress_then_done(client, session_id, handlers):
 
 def test_event_stream_ids_allow_resuming(client, session_id, handlers):
     handlers[RunKind.JOB_MARKET] = ok_handler({}, events=("a", "b", "c"))
-    run_id = client.post(run_url(session_id, "/job-market")).json()["id"]
+    run_id = client.post(run_url(session_id), json={"kind": "job_market"}).json()["id"]
     response = client.get(run_url(session_id, f"/{run_id}/events"), headers={"Last-Event-ID": "0"})
     steps = [
         json.loads(e["data"])["step"] for e in parse_sse(response.text) if e["event"] == "progress"
@@ -528,7 +654,7 @@ def test_event_stream_ids_allow_resuming(client, session_id, handlers):
 
 def test_done_event_carries_the_final_run(client, session_id, handlers):
     handlers[RunKind.JOB_MARKET] = ok_handler({"answer": 42})
-    run_id = client.post(run_url(session_id, "/job-market")).json()["id"]
+    run_id = client.post(run_url(session_id), json={"kind": "job_market"}).json()["id"]
     done = parse_sse(client.get(run_url(session_id, f"/{run_id}/events")).text)[-1]
     assert json.loads(done["data"])["result"] == {"answer": 42}
 
@@ -553,7 +679,7 @@ def test_failed_handler_marks_the_run_failed_without_leaking_details(client, ses
         raise RuntimeError("secret internal path /etc/x")
 
     handlers[RunKind.JOB_MARKET] = boom
-    run_id = client.post(run_url(session_id, "/job-market")).json()["id"]
+    run_id = client.post(run_url(session_id), json={"kind": "job_market"}).json()["id"]
     run = stored_run(run_id)
     assert run.status == Status.FAILED and "secret" not in run.error
 
@@ -563,12 +689,12 @@ def test_user_facing_errors_are_shown_as_is(client, session_id, handlers):
         raise UserFacingError("No learning path could be built.")
 
     handlers[RunKind.JOB_MARKET] = no_path
-    run_id = client.post(run_url(session_id, "/job-market")).json()["id"]
+    run_id = client.post(run_url(session_id), json={"kind": "job_market"}).json()["id"]
     assert stored_run(run_id).error == "No learning path could be built."
 
 
 def test_runs_record_start_and_finish_times(client, session_id):
-    run = stored_run(client.post(run_url(session_id, "/job-market")).json()["id"])
+    run = stored_run(client.post(run_url(session_id), json={"kind": "job_market"}).json()["id"])
     assert run.started_at is not None and run.finished_at >= run.started_at
 
 
@@ -578,7 +704,7 @@ def test_handlers_can_update_the_session(client, session_id, handlers):
         return {}
 
     handlers[RunKind.JOB_MARKET] = extract
-    client.post(run_url(session_id, "/job-market"))
+    client.post(run_url(session_id), json={"kind": "job_market"})
     assert client.get(f"{API}/sessions/{session_id}").json()["skills"] == ["Go"]
 
 
@@ -587,7 +713,7 @@ def test_handlers_see_a_snapshot_of_the_session(client, session_id, handlers):
     handlers[RunKind.JOB_MARKET] = lambda context: (
         seen.update(role=context.session.target_role) or {}
     )
-    client.post(run_url(session_id, "/job-market"))
+    client.post(run_url(session_id), json={"kind": "job_market"})
     assert seen == {"role": "Backend Dev"}
 
 
@@ -632,6 +758,10 @@ def interview_url(session_id, suffix=""):
     return f"{API}/sessions/{session_id}/interviews{suffix}"
 
 
+def topics_url(session_id, query=""):
+    return f"{API}/sessions/{session_id}/interview-topics{query}"
+
+
 def test_starting_an_interview_returns_the_first_question(client, session_id, coach):
     response = client.post(interview_url(session_id), json={"company_focus": "google"})
     body = response.json()
@@ -643,9 +773,66 @@ def test_starting_an_interview_returns_the_first_question(client, session_id, co
 
 
 def test_interview_topics_default_to_the_latest_skill_gaps(client, session_id, coach):
+    add_run(session_id, RunKind.JOB_MARKET, result={"analysis": {"skill_gaps": ["mongodb"]}})
+    body = client.post(interview_url(session_id), json={"company_focus": "google"}).json()
+    assert body["topics"] == ["Databases", "System Design"]
+
+
+def test_default_topics_are_ones_the_company_has_questions_on(client, session_id, coach):
     add_run(session_id, RunKind.JOB_MARKET, result={"analysis": {"skill_gaps": ["docker"]}})
-    body = client.post(interview_url(session_id), json={}).json()
-    assert body["topics"] == ["Cloud & DevOps", "System Design"]
+    body = client.post(interview_url(session_id), json={"company_focus": "generic"}).json()
+    assert body["topics"] == ["Deployment & Server Management", "System Design"]
+
+
+def test_chosen_topics_are_saved_as_the_question_files_name_them(client, session_id, coach):
+    body = client.post(interview_url(session_id), json={"topics": [" system design"]}).json()
+    assert body["topics"] == ["System Design"]
+
+
+def test_a_topic_without_questions_is_rejected_with_the_choices(client, session_id, coach):
+    response = client.post(interview_url(session_id), json={"topics": ["Python", "System Design"]})
+    detail = response.json()["detail"]
+    assert response.status_code == 422
+    assert detail.startswith("No generic questions on: Python. Choose from: ")
+    assert "Programming Languages" in detail
+    assert client.get(f"{API}/sessions/{session_id}/runs").json() == []
+
+
+def test_unknown_topics_for_all_companies_are_named_in_the_error(client, session_id, coach):
+    payload = {"company_focus": "all", "topics": ["Python", "Basket weaving", "System Design"]}
+    detail = client.post(interview_url(session_id), json=payload).json()["detail"]
+    assert detail.startswith("No interview questions on: Python, Basket weaving. Choose from: ")
+
+
+def test_topics_are_checked_against_the_chosen_company(client, session_id, coach):
+    payload = {"company_focus": "generic", "topics": ["Python & Language-Specific"]}
+    assert client.post(interview_url(session_id), json=payload).status_code == 422
+    payload["company_focus"] = "google"
+    assert client.post(interview_url(session_id), json=payload).status_code == 201
+
+
+def test_topic_list_has_the_companys_topics_and_the_suggested_ones(client, session_id):
+    add_run(session_id, RunKind.JOB_MARKET, result={"analysis": {"skill_gaps": ["mongodb"]}})
+    body = client.get(topics_url(session_id, "?company_focus=google")).json()
+    assert body["topics"] == interview_coach.interview_topics("google")
+    assert body["suggested"] == ["Databases", "System Design"]
+
+
+def test_topic_list_is_for_generic_questions_by_default(client, session_id):
+    body = client.get(topics_url(session_id)).json()
+    assert body == {
+        "topics": interview_coach.interview_topics("generic"),
+        "suggested": interview_coach.DEFAULT_TOPICS,
+    }
+
+
+def test_topic_list_rejects_an_unknown_company(client, session_id):
+    url = topics_url(session_id, "?company_focus=initech")
+    assert client.get(url).status_code == 422
+
+
+def test_topic_list_needs_an_existing_session(client):
+    assert client.get(topics_url("missing")).status_code == 404
 
 
 def test_interview_topics_without_analysis_use_the_defaults(client, session_id, coach):
@@ -873,10 +1060,10 @@ def test_unserialisable_result_fails_the_run_without_blocking_its_kind(
     client, session_id, handlers
 ):
     handlers[RunKind.JOB_MARKET] = lambda context: {"x": object()}
-    first = client.post(run_url(session_id, "/job-market")).json()["id"]
+    first = client.post(run_url(session_id), json={"kind": "job_market"}).json()["id"]
     handlers[RunKind.JOB_MARKET] = lambda context: {}
     assert stored_run(first).status == Status.FAILED
-    assert client.post(run_url(session_id, "/job-market")).status_code == 202
+    assert client.post(run_url(session_id), json={"kind": "job_market"}).status_code == 202
 
 
 def test_session_deleted_mid_run_stops_the_handler_quietly(engine):
@@ -932,7 +1119,7 @@ def test_long_user_facing_errors_are_truncated(client, session_id, handlers):
         raise UserFacingError("x" * 600)
 
     handlers[RunKind.JOB_MARKET] = wordy
-    run_id = client.post(run_url(session_id, "/job-market")).json()["id"]
+    run_id = client.post(run_url(session_id), json={"kind": "job_market"}).json()["id"]
     assert len(stored_run(run_id).error) == 500
 
 
@@ -944,7 +1131,7 @@ def test_run_is_marked_running_while_its_handler_works(client, session_id, handl
         return {}
 
     handlers[RunKind.JOB_MARKET] = check
-    client.post(run_url(session_id, "/job-market"))
+    client.post(run_url(session_id), json={"kind": "job_market"})
     assert seen == {"status": Status.RUNNING}
 
 
@@ -989,14 +1176,14 @@ def test_learning_path_uses_the_newest_analysis(client, session_id):
         finished_at=main.career_sessions.utcnow() - timedelta(hours=1),
     )
     newest = add_run(session_id, RunKind.JOB_MARKET, result={"analysis": {"skill_gaps": ["new"]}})
-    run_id = client.post(run_url(session_id, "/learning-path")).json()["id"]
+    run_id = client.post(run_url(session_id), json={"kind": "learning_path"}).json()["id"]
     assert stored_run(run_id).input == {"skill_gaps": ["new"], "job_market_run_id": newest}
 
 
 def test_resume_profile_keeps_every_extra_skill(client, session_id):
     client.patch(f"{API}/sessions/{session_id}", json={"skills": ["Go"]})
     run_id = client.post(
-        run_url(session_id, "/resume"), json={"extra_skills": ["Rust", "SQL"]}
+        run_url(session_id), json={"kind": "resume", "extra_skills": ["Rust", "SQL"]}
     ).json()["id"]
     assert stored_run(run_id).input["profile"]["skills"] == ["Go", "Rust", "SQL"]
 
@@ -1005,20 +1192,26 @@ def test_files_attached_to_non_resume_runs_are_not_served(client, session_id):
     run_id = add_run(session_id, RunKind.JOB_MARKET)
     with session_scope() as db:
         db.add(ResumeFile(run_id=run_id, latex="x", pdf=b"y"))
-    assert client.get(run_url(session_id, f"/{run_id}/resume.tex")).status_code == 404
+    assert client.get(run_url(session_id, f"/{run_id}/resume?format=tex")).status_code == 404
 
 
 def test_uppercase_upload_suffix_is_accepted(client, session_id):
     assert (
-        client.post(run_url(session_id, "/skills/resume"), files=upload("CV.TXT")).status_code
+        client.post(
+            run_url(session_id), data={"kind": "skills_from_resume"}, files=upload("CV.TXT")
+        ).status_code
         == 202
     )
 
 
 def test_empty_and_corrupt_uploads_give_different_reasons(client, session_id):
-    empty = client.post(run_url(session_id, "/skills/resume"), files=upload(content=b" ")).json()
+    empty = client.post(
+        run_url(session_id), data={"kind": "skills_from_resume"}, files=upload(content=b" ")
+    ).json()
     corrupt = client.post(
-        run_url(session_id, "/skills/resume"), files=upload("cv.pdf", b"junk", "application/pdf")
+        run_url(session_id),
+        data={"kind": "skills_from_resume"},
+        files=upload("cv.pdf", b"junk", "application/pdf"),
     ).json()
     assert (
         empty["detail"] == "No text found in the file" and "Could not read PDF" in corrupt["detail"]
@@ -1034,7 +1227,7 @@ def test_deleting_a_session_also_deletes_its_resume_files(client, session_id):
 
 def test_non_numeric_last_event_id_replays_everything(client, session_id, handlers):
     handlers[RunKind.JOB_MARKET] = ok_handler({}, events=("a", "b"))
-    run_id = client.post(run_url(session_id, "/job-market")).json()["id"]
+    run_id = client.post(run_url(session_id), json={"kind": "job_market"}).json()["id"]
     response = client.get(
         run_url(session_id, f"/{run_id}/events"), headers={"Last-Event-ID": "abc"}
     )
@@ -1191,7 +1384,7 @@ def new_session(test_client):
 
 def test_stream_delivers_events_that_happen_while_it_is_open(parked_client):
     sid = new_session(parked_client)
-    run_id = parked_client.post(run_url(sid, "/job-market")).json()["id"]
+    run_id = parked_client.post(run_url(sid), json={"kind": "job_market"}).json()["id"]
 
     def advance(poll):
         with session_scope() as db:
@@ -1210,7 +1403,7 @@ def test_stream_delivers_events_that_happen_while_it_is_open(parked_client):
 
 def test_stream_ends_without_done_when_the_session_is_deleted(parked_client):
     sid = new_session(parked_client)
-    run_id = parked_client.post(run_url(sid, "/job-market")).json()["id"]
+    run_id = parked_client.post(run_url(sid), json={"kind": "job_market"}).json()["id"]
 
     def delete_on_second_poll(poll):
         if poll == 2:
@@ -1223,7 +1416,7 @@ def test_stream_ends_without_done_when_the_session_is_deleted(parked_client):
 def test_stream_of_an_unfinished_run_stops_at_the_time_limit(parked_client, monkeypatch):
     monkeypatch.setattr(main_runs, "MAX_STREAM_SECONDS", 0)
     sid = new_session(parked_client)
-    run_id = parked_client.post(run_url(sid, "/job-market")).json()["id"]
+    run_id = parked_client.post(run_url(sid), json={"kind": "job_market"}).json()["id"]
     events = parse_sse(parked_client.get(run_url(sid, f"/{run_id}/events")).text)
     assert all(e.get("event") != "done" for e in events)
 
@@ -1269,26 +1462,30 @@ def test_requests_commit_before_the_response_is_sent(engine, handlers, monkeypat
 
 def test_concurrent_duplicate_request_gets_409_not_500(parked_client, monkeypatch):
     sid = new_session(parked_client)
-    parked_client.post(run_url(sid, "/job-market"))
+    parked_client.post(run_url(sid), json={"kind": "job_market"})
     monkeypatch.setattr(career_sessions, "unfinished_run", lambda db, session_id, kind: None)
-    assert parked_client.post(run_url(sid, "/job-market")).status_code == 409
+    assert parked_client.post(run_url(sid), json={"kind": "job_market"}).status_code == 409
 
 
 def test_rerendered_resume_files_can_be_downloaded(client, session_id):
     run_id = add_run(session_id, RunKind.RESUME_RENDER, result={})
     with session_scope() as db:
         db.add(ResumeFile(run_id=run_id, latex="L", pdf=b"P"))
-    assert client.get(run_url(session_id, f"/{run_id}/resume.tex")).text == "L"
-    assert client.get(run_url(session_id, f"/{run_id}/resume.pdf")).content == b"P"
+    assert client.get(run_url(session_id, f"/{run_id}/resume?format=tex")).text == "L"
+    assert client.get(run_url(session_id, f"/{run_id}/resume?format=pdf")).content == b"P"
 
 
 def test_rerender_with_an_unknown_template_is_rejected(client, session_id):
     body = {"draft": {"contact": {}, "summary": "s"}, "template_id": "missing"}
-    assert client.post(run_url(session_id, "/resume-render"), json=body).status_code == 422
+    assert (
+        client.post(run_url(session_id), json={"kind": "resume_render", **body}).status_code == 422
+    )
 
 
 def test_rerender_requires_a_contact(client, session_id):
-    response = client.post(run_url(session_id, "/resume-render"), json={"draft": {"summary": "s"}})
+    response = client.post(
+        run_url(session_id), json={"kind": "resume_render", "draft": {"summary": "s"}}
+    )
     assert response.status_code == 422
 
 
@@ -1297,7 +1494,7 @@ def test_generic_error_message_is_exact(client, session_id, handlers):
         raise RuntimeError("internal detail")
 
     handlers[RunKind.JOB_MARKET] = boom
-    run_id = client.post(run_url(session_id, "/job-market")).json()["id"]
+    run_id = client.post(run_url(session_id), json={"kind": "job_market"}).json()["id"]
     assert stored_run(run_id).error == "RuntimeError: the agent failed. Please try again."
 
 
@@ -1305,7 +1502,7 @@ def test_unserialisable_result_is_reported_as_an_agent_failure(client, session_i
     from app.services import runner
 
     handlers[RunKind.JOB_MARKET] = lambda context: {"x": object()}
-    run_id = client.post(run_url(session_id, "/job-market")).json()["id"]
+    run_id = client.post(run_url(session_id), json={"kind": "job_market"}).json()["id"]
     assert stored_run(run_id).error not in (None, runner.SAVE_FAILED_MESSAGE)
 
 
@@ -1361,7 +1558,7 @@ def test_interview_topics_must_be_short_non_blank_text(client, session_id, coach
 
 def test_review_request_of_exactly_the_limit_is_accepted(client, session_id):
     response = client.post(
-        run_url(session_id, "/resume-review"), files=upload(), data={"request": "x" * 1000}
+        run_url(session_id), files=upload(), data={"kind": "resume_review", "request": "x" * 1000}
     )
     assert response.status_code == 202
 
@@ -1382,7 +1579,9 @@ def test_skill_list_size_limit(client, session_id, count, code):
 
 def test_nul_characters_are_removed_from_uploads(client, session_id):
     run_id = client.post(
-        run_url(session_id, "/skills/resume"), files=upload(content=b"Py\x00thon")
+        run_url(session_id),
+        data={"kind": "skills_from_resume"},
+        files=upload(content=b"Py\x00thon"),
     ).json()["id"]
     assert stored_run(run_id).input == {"resume_text": "Python"}
 
@@ -1505,9 +1704,9 @@ def test_scheduling_failure_does_not_leave_a_queued_run(engine, handlers, monkey
     )
     with TestClient(main.create_app()) as test_client:
         sid = new_session(test_client)
-        first = test_client.post(run_url(sid, "/job-market"))
+        first = test_client.post(run_url(sid), json={"kind": "job_market"})
         statuses = [r["status"] for r in test_client.get(run_url(sid)).json()]
-        second = test_client.post(run_url(sid, "/job-market"))
+        second = test_client.post(run_url(sid), json={"kind": "job_market"})
     assert (first.status_code, statuses, second.status_code) == (503, ["failed"], 503)
 
 
@@ -1577,21 +1776,23 @@ def test_skill_names_are_limited_to_100_characters(client, session_id, payload, 
 
 @pytest.mark.parametrize(("count", "code"), [(10, 201), (11, 422)])
 def test_at_most_ten_interview_topics(client, session_id, coach, count, code):
-    topics = [f"topic {i}" for i in range(count)]
-    assert client.post(interview_url(session_id), json={"topics": topics}).status_code == code
+    topics = interview_coach.interview_topics("all")[:count]
+    payload = {"company_focus": "all", "topics": topics}
+    assert client.post(interview_url(session_id), json=payload).status_code == code
 
 
 @pytest.mark.parametrize(("count", "code"), [(100, 202), (101, 422)])
 def test_extra_skill_list_limit(client, session_id, count, code):
     response = client.post(
-        run_url(session_id, "/resume"), json={"extra_skills": [f"s{i}" for i in range(count)]}
+        run_url(session_id),
+        json={"kind": "resume", "extra_skills": [f"s{i}" for i in range(count)]},
     )
     assert response.status_code == code
 
 
 def test_blank_extra_skills_are_dropped_and_trimmed(client, session_id):
     run_id = client.post(
-        run_url(session_id, "/resume"), json={"extra_skills": ["", "  ", " Rust "]}
+        run_url(session_id), json={"kind": "resume", "extra_skills": ["", "  ", " Rust "]}
     ).json()["id"]
     assert stored_run(run_id).input["profile"]["skills"] == ["Rust"]
 
@@ -1639,9 +1840,9 @@ def test_failure_while_starting_a_run_marks_it_failed(client, session_id, monkey
         raise RuntimeError("bad row")
 
     monkeypatch.setattr(runner, "_snapshot", broken)
-    first = client.post(run_url(session_id, "/job-market")).json()["id"]
+    first = client.post(run_url(session_id), json={"kind": "job_market"}).json()["id"]
     assert stored_run(first).status == Status.FAILED
-    assert client.post(run_url(session_id, "/job-market")).status_code == 202
+    assert client.post(run_url(session_id), json={"kind": "job_market"}).status_code == 202
 
 
 def test_run_without_a_handler_is_marked_failed(engine):
@@ -1671,7 +1872,7 @@ def test_handlers_receive_the_sessions_current_fields(client, session_id, handle
         f"{API}/sessions/{session_id}", json={"skills": ["Go", "SQL"], "location": "Remote"}
     )
     handlers[RunKind.JOB_MARKET] = capture
-    client.post(run_url(session_id, "/job-market"))
+    client.post(run_url(session_id), json={"kind": "job_market"})
     assert seen == {
         "role": "Backend Dev",
         "location": "Remote",
@@ -1736,7 +1937,7 @@ def test_session_skills_are_deduplicated_ignoring_case(client, session_id):
 def test_resume_skills_are_deduplicated_ignoring_case(client, session_id):
     client.patch(f"{API}/sessions/{session_id}", json={"skills": ["Python"]})
     run_id = client.post(
-        run_url(session_id, "/resume"), json={"extra_skills": ["python", "Rust"]}
+        run_url(session_id), json={"kind": "resume", "extra_skills": ["python", "Rust"]}
     ).json()["id"]
     assert stored_run(run_id).input["profile"]["skills"] == ["Python", "Rust"]
 

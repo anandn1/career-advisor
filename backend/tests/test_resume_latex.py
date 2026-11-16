@@ -1,3 +1,5 @@
+import os
+import shutil
 import subprocess
 
 import pytest
@@ -22,12 +24,169 @@ from app.services import latex
         ("~", r"\textasciitilde{}"),
         ("^", r"\textasciicircum{}"),
         ("\\", r"\textbackslash{}"),
+        ("<", r"\textless{}"),
+        (">", r"\textgreater{}"),
+        ("|", r"\textbar{}"),
+        ('"', "''"),
         ("plain text", "plain text"),
         ("", ""),
     ],
 )
 def test_each_special_character_is_escaped(raw, escaped):
     assert rs.escape_latex(raw) == escaped
+
+
+@pytest.mark.parametrize(
+    ("raw", "converted"),
+    [
+        ("\u00a0", "~"),
+        ("\u202f", "~"),
+        ("\u2009", r"\,"),
+        ("\u2002", " "),
+        ("\u2003", " "),
+        ("\u2007", " "),
+        ("\u2008", " "),
+        ("\u2010", "-"),
+        ("\u2011", "-"),
+        ("\u2012", "--"),
+        ("\u2013", "--"),
+        ("\u2014", "---"),
+        ("\u2212", "-"),
+        ("\u2032", "'"),
+        ("\u2033", "''"),
+        ("\u2264", r"$\leq$"),
+        ("\u2265", r"$\geq$"),
+        ("\u2248", r"$\approx$"),
+        ("\u2260", r"$\neq$"),
+        ("\u21d2", r"$\Rightarrow$"),
+        ("\u2219", r"\textbullet{}"),
+        ("\u25aa", r"\textbullet{}"),
+        ("\u25cf", r"\textbullet{}"),
+        ("\u25e6", r"\textbullet{}"),
+    ],
+    ids=lambda value: f"U+{ord(value):04X}" if len(value) == 1 else value,
+)
+def test_unicode_pdflatex_cannot_print_is_converted(raw, converted):
+    assert rs.escape_latex(raw) == converted
+
+
+@pytest.mark.parametrize(
+    "char",
+    [
+        "\u200b",  # zero-width space
+        "\u200c",  # zero-width non-joiner
+        "\u200d",  # zero-width joiner
+        "\u2060",  # word joiner
+        "\ufeff",  # byte order mark
+        "\ufe0e",  # text presentation selector
+        "\ufe0f",  # emoji presentation selector
+        "\u20e3",  # combining keycap
+        "\u0301",  # combining accent with nothing to join
+        "\u2705",  # check mark button (emoji inside the Basic Multilingual Plane)
+        "\u26a1",  # high voltage
+        "\u2728",  # sparkles
+        "\u2605",  # black star
+        "\u2713",  # check mark
+        "\U0001f680",  # rocket (beyond the Basic Multilingual Plane)
+        "\ud83d",  # lone surrogate
+        "\x07",  # bell
+        "\x0b",  # vertical tab
+        "\x0c",  # form feed (an outer macro in TeX, fatal inside arguments)
+        "\x7f",  # delete
+        "\x85",  # next line
+        "\u2028",  # line separator
+        "\u2029",  # paragraph separator
+    ],
+    ids=lambda c: f"U+{ord(c):04X}",
+)
+def test_unprintable_characters_are_dropped(char):
+    assert rs.escape_latex(f"1{char}2") == "12"  # digits take no accent
+
+
+def test_printable_unicode_is_kept():
+    kept = "José Núñez Łódź “q” ‘q’ • … € ™ → ← ‰ † ¡ ¿ ß"
+    assert rs.escape_latex(kept) == kept
+
+
+def test_line_breaks_and_tabs_become_spaces():
+    """A blank line inside a command argument would fail the whole compile."""
+    assert rs.escape_latex("a\n\nb\tc\r\nd") == "a  b c  d"
+
+
+def test_left_out_characters_are_logged(caplog):
+    assert rs.escape_latex("Дима ✅ ok") == "  ok"
+    assert "Left out characters pdflatex cannot print: Даим✅" in caplog.text
+
+
+def test_nothing_is_logged_when_nothing_is_left_out(caplog):
+    rs.escape_latex("José, R&D\u200b")  # an invisible character is not worth a warning
+    assert "Left out" not in caplog.text
+
+
+def test_accents_typed_as_two_characters_are_joined():
+    assert rs.escape_latex("Jose\u0301 Nu\u0301n\u0303ez") == "José Núñez"
+
+
+@pytest.mark.parametrize(("low", "high"), rs.PRINTABLE_RANGES, ids=lambda c: f"U+{c:04X}")
+def test_both_ends_of_each_printable_range_are_kept(low, high):
+    for char in {chr(low), chr(high)} - set(rs.LATEX_SPECIAL_CHARACTERS):
+        assert rs.escape_latex(char) == char
+
+
+def test_the_character_after_a_printable_range_is_dropped():
+    assert rs.escape_latex("\u017e\u017f") == "\u017e"  # ž kept, long s dropped
+
+
+def test_unicode_and_latex_specials_are_escaped_in_one_pass():
+    raw = "50%\u00a0off~\u2014now a\u2009b\u2264c$"
+    assert rs.escape_latex(raw) == r"50\%~off\textasciitilde{}---now a\,b$\leq$c\$"
+
+
+def _everything_escaping_can_output() -> str:
+    printable = "".join(
+        chr(code) for low, high in rs.PRINTABLE_RANGES for code in range(low, high + 1)
+    )
+    models_write = "".join(rs.UNICODE_REPLACEMENTS) + '\u2705\u2605\U0001f680\u0301\ufe0f<>|"'
+    return rs.escape_latex(printable + models_write)
+
+
+PREAMBLES = {
+    "default": "\\documentclass{article}\n",
+    "t1": "\\documentclass{article}\n\\usepackage[T1]{fontenc}\n",
+}
+
+
+@pytest.mark.skipif(shutil.which("pdflatex") is None, reason="needs TeX (runs in the image)")
+@pytest.mark.parametrize("preamble", PREAMBLES.values(), ids=PREAMBLES.keys())
+def test_everything_escaping_can_output_compiles(preamble):
+    body = _everything_escaping_can_output()
+    latex.compile_pdf(f"{preamble}\\begin{{document}}\n{body}\n\\end{{document}}")
+
+
+# Escaped text lands inside the templates' commands as well as in the body.
+PLACES = {
+    "body": "{}",
+    "bold": "\\textbf{{{}}}",
+    "section": "\\section{{{}}}",
+    "link": "\\href{{https://example.com}}{{{}}}",
+}
+
+
+@pytest.mark.skipif(shutil.which("pdflatex") is None, reason="needs TeX (runs in the image)")
+@pytest.mark.parametrize("place", PLACES.values(), ids=PLACES.keys())
+def test_escaped_text_with_blank_lines_compiles_inside_commands(place):
+    body = place.format(_everything_escaping_can_output() + rs.escape_latex("a\n\nb\r\rc"))
+    latex.compile_pdf(
+        f"\\documentclass{{article}}\n\\usepackage{{hyperref}}\n"
+        f"\\begin{{document}}\n{body}\n\\end{{document}}"
+    )
+
+
+@pytest.mark.skipif(shutil.which("pdflatex") is None, reason="needs TeX (runs in the image)")
+def test_everything_escaping_can_output_compiles_in_the_default_template():
+    template = rs.default_template()
+    end = template.rindex("\\end{document}")
+    latex.compile_pdf(template[:end] + _everything_escaping_can_output() + "\n" + template[end:])
 
 
 def test_backslash_is_escaped_only_once():
@@ -173,6 +332,33 @@ def succeed(cwd):
     return subprocess.CompletedProcess([], 0, stdout="ok")
 
 
+def _stand_in_pdflatex(tmp_path, monkeypatch, exit_code: int) -> None:
+    """A real `pdflatex` executable on PATH that prints bytes which are not UTF-8."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    script = bin_dir / "pdflatex"
+    script.write_text(
+        "#!/bin/sh\n"
+        "printf 'Missing character: \\242\\377 in font\\n'\n"
+        "printf '%%PDF-1.7 stand-in' > doc.pdf\n"
+        f"exit {exit_code}\n"
+    )
+    script.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}:{os.environ['PATH']}")
+
+
+def test_output_that_is_not_utf8_does_not_crash_a_good_compile(tmp_path, monkeypatch):
+    _stand_in_pdflatex(tmp_path, monkeypatch, exit_code=0)
+    assert latex.compile_pdf(VALID) == b"%PDF-1.7 stand-in"
+
+
+def test_output_that_is_not_utf8_still_reports_a_failed_compile(tmp_path, monkeypatch):
+    _stand_in_pdflatex(tmp_path, monkeypatch, exit_code=1)
+    with pytest.raises(latex.LatexCompileError) as error:
+        latex.compile_pdf(VALID)
+    assert "Missing character: \ufffd\ufffd in font" in error.value.log_tail
+
+
 def test_compiled_pdf_bytes_are_returned(fake_pdflatex):
     fake_pdflatex(succeed)
     assert latex.compile_pdf(VALID) == b"%PDF-1.7 fake"
@@ -293,6 +479,30 @@ def test_render_latex_escapes_the_resume_data(monkeypatch):
     monkeypatch.setattr(rs, "get_resume_llm", lambda: llm)
     rs.render_latex(draft(name="R&D Lead"), "TEMPLATE")
     assert r"R\\&D Lead" in llm.prompts[0] and r"50\\%" in llm.prompts[0]
+
+
+def test_render_latex_sends_non_ascii_text_as_itself(monkeypatch):
+    """json.dumps would write "\\u00e9", which LaTeX reads as an accent command."""
+    llm = RecordingResumeLLM(reply=VALID)
+    monkeypatch.setattr(rs, "get_resume_llm", lambda: llm)
+    rs.render_latex(draft(name="José Núñez"), "TEMPLATE")
+    assert "José Núñez" in llm.prompts[0]
+    assert "\\u00" not in llm.prompts[0]
+
+
+def test_render_latex_turns_a_non_breaking_hyphen_into_a_plain_one(monkeypatch):
+    llm = RecordingResumeLLM(reply=VALID)
+    monkeypatch.setattr(rs, "get_resume_llm", lambda: llm)
+    rs.render_latex(draft(name="Results\u2011driven"), "TEMPLATE")
+    assert "Results-driven" in llm.prompts[0]
+
+
+def test_render_latex_tells_the_model_to_leave_out_empty_contact_items(monkeypatch):
+    llm = RecordingResumeLLM(reply=VALID)
+    monkeypatch.setattr(rs, "get_resume_llm", lambda: llm)
+    rs.render_latex(draft(name="Ada", email="ada@example.com"), "TEMPLATE")
+    prompt = " ".join(llm.prompts[0].split())
+    assert "contact item (with its icon and separator) that has no data" in prompt
 
 
 def test_render_latex_returns_the_cleaned_document(monkeypatch):

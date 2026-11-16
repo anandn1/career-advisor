@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from app.core import checkpointer
+from app.core import checkpointer, config, resources
 from app.core.config import Settings
 
 
@@ -65,9 +65,39 @@ def test_cors_origins_default_to_local_frontend():
     assert settings().cors_origins == ["http://localhost:3000"]
 
 
-def test_empty_optional_keys_count_as_unset(monkeypatch):
-    monkeypatch.setenv("COHERE_API_KEY", "")
-    assert settings().cohere_api_key is None
+@pytest.mark.parametrize("key", ["COHERE_API_KEY", "TAVILY_API_KEY", "GITHUB_ACCESS_TOKEN"])
+@pytest.mark.parametrize("blank", ["", "   "], ids=["empty", "spaces"])
+def test_blank_optional_keys_count_as_unset(monkeypatch, key, blank):
+    monkeypatch.setenv(key, blank)
+    assert getattr(settings(), key.lower()) is None
+
+
+def test_keys_pasted_with_spaces_are_trimmed(monkeypatch):
+    monkeypatch.setenv("GROQ_API_KEY", " gsk-123 ")
+    monkeypatch.setenv("COHERE_API_KEY", "\tco-456\n")
+    keys = settings()
+    assert keys.groq_api_key.get_secret_value() == "gsk-123"
+    assert keys.cohere_api_key.get_secret_value() == "co-456"
+
+
+@pytest.mark.parametrize(
+    ("name", "field"), [("GROQ_API_KEY", "groq_api_key"), ("DATABASE_URL", "DATABASE_URL")]
+)
+def test_a_blank_required_setting_is_reported_missing(monkeypatch, name, field):
+    monkeypatch.setenv(name, "   ")
+    with pytest.raises(ValidationError) as error:
+        settings()
+    assert [(e["type"], e["loc"]) for e in error.value.errors()] == [("missing", (field,))]
+
+
+def test_a_padded_database_url_is_trimmed_and_normalised(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "  postgres://u:p@db:5432/app  ")
+    assert settings().database_url == "postgresql://u:p@db:5432/app"
+
+
+def test_a_blank_number_keeps_its_default(monkeypatch):
+    monkeypatch.setenv("SESSION_TTL_DAYS", "  ")
+    assert settings().session_ttl_days == 30
 
 
 def test_data_paths_live_under_data_dir(monkeypatch, tmp_path):
@@ -116,5 +146,139 @@ def test_database_password_is_not_shown_in_repr(monkeypatch):
 
 def test_each_store_has_its_own_directory():
     s = settings()
-    directories = [s.market_chroma_dir, s.courses_chroma_dir, s.interview_chroma_dir, s.output_dir]
+    directories = [
+        s.market_chroma_dir,
+        s.courses_chroma_dir,
+        s.interview_chroma_dir,
+        s.output_dir,
+    ]
     assert len(set(directories)) == len(directories)
+
+
+def test_embedding_model_lives_under_data_dir_by_default(monkeypatch, tmp_path):
+    """The folder name is spelled out: renaming it would orphan models already downloaded."""
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    assert settings().embedding_model_dir == tmp_path / "models" / "embeddinggemma-300m-onnx"
+
+
+def test_embedding_model_dir_can_point_outside_data_dir(monkeypatch, tmp_path):
+    monkeypatch.setenv("DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("EMBEDDING_MODEL_DIR", str(tmp_path / "baked-model"))
+    assert settings().embedding_model_dir == tmp_path / "baked-model"
+
+
+@pytest.mark.parametrize("blank", ["", "   "], ids=["empty", "spaces"])
+def test_a_blank_embedding_model_dir_falls_back_to_the_default(monkeypatch, tmp_path, blank):
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("EMBEDDING_MODEL_DIR", blank)
+    assert settings().embedding_model_dir == tmp_path / config.EMBEDDING_MODEL_SUBDIR
+
+
+def test_a_padded_embedding_model_dir_is_trimmed(monkeypatch, tmp_path):
+    monkeypatch.setenv("EMBEDDING_MODEL_DIR", f"  {tmp_path / 'baked-model'}  ")
+    assert settings().embedding_model_dir == tmp_path / "baked-model"
+
+
+def test_the_default_models_are_the_ones_the_evals_chose():
+    chosen = settings()
+    assert (chosen.llm_model, chosen.llm_reasoning_effort) == (
+        "openai/gpt-oss-120b",
+        "medium",
+    )
+    assert (chosen.resume_llm_model, chosen.resume_llm_reasoning_effort) == (
+        "openai/gpt-oss-20b",
+        "low",
+    )
+
+
+@pytest.mark.parametrize("raw", ["none", "None", " NONE "])
+def test_none_sends_no_reasoning_effort(raw, monkeypatch):
+    monkeypatch.setenv("LLM_REASONING_EFFORT", raw)
+    monkeypatch.setenv("RESUME_LLM_REASONING_EFFORT", raw)
+    chosen = settings()
+    assert (chosen.llm_reasoning_effort, chosen.resume_llm_reasoning_effort) == (
+        None,
+        None,
+    )
+
+
+@pytest.mark.parametrize("raw", ["", "   "])
+@pytest.mark.parametrize(
+    ("field", "default"),
+    [("llm_reasoning_effort", "medium"), ("resume_llm_reasoning_effort", "low")],
+)
+def test_an_empty_or_blank_reasoning_effort_keeps_the_default(raw, field, default, monkeypatch):
+    monkeypatch.setenv(field.upper(), raw)
+    assert getattr(settings(), field) == default
+
+
+@pytest.mark.parametrize("raw", ["", "  "])
+def test_an_empty_or_blank_model_keeps_the_default(raw, monkeypatch):
+    monkeypatch.setenv("LLM_MODEL", raw)
+    monkeypatch.setenv("RESUME_LLM_MODEL", raw)
+    chosen = settings()
+    assert (chosen.llm_model, chosen.resume_llm_model) == (
+        "openai/gpt-oss-120b",
+        "openai/gpt-oss-20b",
+    )
+
+
+def test_a_padded_model_name_is_trimmed(monkeypatch):
+    monkeypatch.setenv("RESUME_LLM_MODEL", " openai/gpt-oss-20b \n")
+    assert settings().resume_llm_model == "openai/gpt-oss-20b"
+
+
+@pytest.mark.parametrize("raw", ["maximum", "minimal", "off", "0"])
+@pytest.mark.parametrize("field", ["llm_reasoning_effort", "resume_llm_reasoning_effort"])
+def test_an_unknown_reasoning_effort_fails_fast_and_names_the_setting(raw, field, monkeypatch):
+    monkeypatch.setenv(field.upper(), raw)
+    with pytest.raises(ValidationError) as error:
+        settings()
+    assert [e["loc"] for e in error.value.errors()] == [(field,)]
+
+
+@pytest.mark.parametrize(
+    ("raw", "effort"), [("High", "high"), (" low", "low"), ("MEDIUM", "medium")]
+)
+def test_reasoning_effort_ignores_case_and_spaces(raw, effort, monkeypatch):
+    monkeypatch.setenv("LLM_REASONING_EFFORT", raw)
+    assert settings().llm_reasoning_effort == effort
+
+
+def test_the_general_llm_uses_the_configured_model_and_effort(monkeypatch):
+    monkeypatch.setenv("LLM_MODEL", "some/model")
+    monkeypatch.setenv("LLM_REASONING_EFFORT", "high")
+    llm = resources.get_llm()
+    assert (llm.model_name, llm.reasoning_effort) == ("some/model", "high")
+
+
+def test_the_resume_llm_uses_its_own_model_effort_and_output_budget(monkeypatch):
+    monkeypatch.setenv("RESUME_LLM_MODEL", "other/model")
+    monkeypatch.setenv("LLM_REASONING_EFFORT", "low")
+    monkeypatch.setenv("RESUME_LLM_REASONING_EFFORT", "high")
+    llm = resources.get_resume_llm()
+    assert (llm.model_name, llm.reasoning_effort) == ("other/model", "high")
+    assert resources.get_llm().reasoning_effort == "low"
+    assert llm.max_tokens == resources.RESUME_MAX_TOKENS
+
+
+def test_none_reaches_both_llms_as_no_effort(monkeypatch):
+    monkeypatch.setenv("LLM_REASONING_EFFORT", "none")
+    monkeypatch.setenv("RESUME_LLM_REASONING_EFFORT", "none")
+    assert resources.get_llm().reasoning_effort is None
+    assert resources.get_resume_llm().reasoning_effort is None
+
+
+def test_both_llms_get_the_key_from_settings_not_the_process_environment(monkeypatch):
+    loaded = config.get_settings()
+    monkeypatch.delenv("GROQ_API_KEY")  # as when the key is only in a dotenv file
+    monkeypatch.setattr(resources, "get_settings", lambda: loaded)
+    for factory in (resources.get_llm, resources.get_resume_llm):
+        assert factory().groq_api_key.get_secret_value() == "test-groq-key"
+
+
+def test_the_general_llm_is_deterministic_and_uncapped_and_the_resume_llm_is_not():
+    general, resume = resources.get_llm(), resources.get_resume_llm()
+    assert general.temperature < 1e-6  # langchain-groq stores 0 as 1e-08
+    assert general.max_tokens is None
+    assert resume.temperature == pytest.approx(0.1)

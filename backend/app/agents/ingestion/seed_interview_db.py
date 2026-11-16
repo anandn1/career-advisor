@@ -124,8 +124,10 @@ class InterviewQuestionParser:
             # Update metadata incrementally (key feature for your format)
             for match in meta_matches:
                 key = match.group("key").lower()
-                value = INLINE_COMMENT.sub("", match.group("value")).strip().lower()
-                current_meta[key] = value
+                value = INLINE_COMMENT.sub("", match.group("value")).strip()
+                current_meta[key] = value.lower()
+                if key == "topic":
+                    current_meta["topic_name"] = value  # as written, for showing to users
 
             # Remove metadata lines to isolate questions
             question_block = self.METADATA_PATTERN.sub("", section).strip()
@@ -153,6 +155,7 @@ class InterviewQuestionParser:
                     metadata={
                         "company": current_meta["company"],
                         "topic": current_meta["topic"],
+                        "topic_name": current_meta["topic_name"],
                         "difficulty": current_meta["difficulty"],
                         "question_id": doc_id,
                         "source_file": self.file_path.name,

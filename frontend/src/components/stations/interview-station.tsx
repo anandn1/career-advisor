@@ -6,16 +6,14 @@ import { useId, useState } from "react";
 import { useCurrentSession } from "@/components/session/session-shell";
 import { StationHeader } from "@/components/session/station-header";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useInterview, useReport } from "@/hooks/use-career";
-import { api, type Interview, unwrap } from "@/lib/api/client";
+import { useInterview, useInterviewTopics, useReport } from "@/hooks/use-career";
+import { api, type CompanyFocus, type Interview, unwrap } from "@/lib/api/client";
 import { station } from "@/lib/stations";
 
 const INTERVIEW = station("interview");
-const COMPANIES = ["generic", "amazon", "apple", "google", "meta", "microsoft", "netflix", "nvidia", "all"] as const;
-type Company = (typeof COMPANIES)[number];
+const COMPANIES: CompanyFocus[] = ["generic", "amazon", "apple", "google", "meta", "microsoft", "netflix", "nvidia", "all"];
 
 type Line = { speaker: "interviewer" | "you" | "feedback"; text: string };
 
@@ -27,9 +25,34 @@ export function linesForTurn(interview: Interview): Line[] {
   return lines;
 }
 
-export function parseTopics(text: string): string[] | null {
-  const topics = text.split(",").map((topic) => topic.trim()).filter(Boolean);
-  return topics.length ? topics : null;
+/** Adds the topic if it is missing, removes it if it is there. */
+export function toggleTopic(topics: string[], topic: string): string[] {
+  return topics.includes(topic) ? topics.filter((t) => t !== topic) : [...topics, topic];
+}
+
+/** What the topic choice means for the interview about to start. */
+export function topicHint(pickedByUser: boolean, chosenCount: number): string {
+  if (chosenCount === 0) return "None chosen: you get the usual topics for this company.";
+  return pickedByUser ? `${chosenCount} chosen.` : "Picked from your skill gaps. Tap to change.";
+}
+
+function TopicPicker({ topics, chosen, onToggle }: { topics: string[]; chosen: string[]; onToggle: (topic: string) => void }) {
+  return (
+    <ul className="flex flex-wrap gap-2">
+      {topics.map((topic) => {
+        const on = chosen.includes(topic);
+        return (
+          <li key={topic}>
+            <button type="button" aria-pressed={on} onClick={() => onToggle(topic)}
+                    className={`rounded-full border-2 px-3 py-1 text-sm ${on ? "font-bold text-ink" : "bg-surface hover:bg-paper"}`}
+                    style={{ borderColor: INTERVIEW.colour, backgroundColor: on ? INTERVIEW.colour : undefined }}>
+              {topic}
+            </button>
+          </li>
+        );
+      })}
+    </ul>
+  );
 }
 
 function Transcript({ lines }: { lines: Line[] }) {
@@ -77,8 +100,13 @@ export function InterviewStation() {
   const session = useCurrentSession();
   const report = useReport(session.id);
   const ids = { company: useId(), topics: useId(), answer: useId() };
-  const [company, setCompany] = useState<Company>("generic");
-  const [topics, setTopics] = useState("");
+  const [company, setCompany] = useState<CompanyFocus>("generic");
+  const available = useInterviewTopics(session.id, company);
+  // Until the user picks, the topics for their skill gaps are chosen.
+  const [picked, setPicked] = useState<string[] | null>(null);
+  const offered = available.data?.topics ?? [];
+  // Only topics on offer can be sent, so nothing the user cannot see or remove is chosen.
+  const chosen = (picked ?? available.data?.suggested ?? []).filter((topic) => offered.includes(topic));
   const [interview, setInterview] = useState<Interview | null>(null);
   const [lines, setLines] = useState<Line[]>([]);
   const [answer, setAnswer] = useState("");
@@ -87,7 +115,7 @@ export function InterviewStation() {
   const start = useMutation({
     mutationFn: async () =>
       unwrap(await api.POST("/api/v1/sessions/{session_id}/interviews", {
-        params: { path: sessionPath }, body: { company_focus: company, topics: parseTopics(topics) },
+        params: { path: sessionPath }, body: { company_focus: company, topics: chosen.length ? chosen : null },
       })),
     onSuccess: (started) => { setInterview(started); setLines(linesForTurn(started)); },
   });
@@ -116,17 +144,27 @@ export function InterviewStation() {
               onSubmit={(e) => { e.preventDefault(); start.mutate(); }}>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor={ids.company} className="signage text-xs">Company questions</Label>
-            <select id={ids.company} value={company} onChange={(e) => setCompany(e.target.value as Company)}
+            <select id={ids.company} value={company}
+                    onChange={(e) => { setCompany(e.target.value as CompanyFocus); setPicked(null); }}
                     className="h-9 rounded-md border border-input bg-surface px-3">
               {COMPANIES.map((name) => <option key={name} value={name}>{name === "all" ? "All companies" : name[0].toUpperCase() + name.slice(1)}</option>)}
             </select>
           </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor={ids.topics} className="signage text-xs">Topics (optional, comma separated)</Label>
-            <Input id={ids.topics} value={topics} onChange={(e) => setTopics(e.target.value)} placeholder="Based on your skill gaps" />
-          </div>
+          <fieldset className="flex flex-col gap-2 sm:col-span-2" aria-describedby={ids.topics}>
+            <legend className="signage mb-1.5 text-xs">Topics</legend>
+            <p id={ids.topics} className="text-sm text-ink-muted">
+              {topicHint(picked !== null, chosen.length)}
+            </p>
+            {available.isPending && <p className="text-sm text-ink-muted">Loading this company&apos;s topics…</p>}
+            {available.error && <p role="alert" className="text-danger">{available.error.message}</p>}
+            {available.data && (
+              <TopicPicker topics={available.data.topics} chosen={chosen}
+                           onToggle={(topic) => setPicked(toggleTopic(chosen, topic))} />
+            )}
+          </fieldset>
           {start.error && <p role="alert" className="text-danger sm:col-span-2">{start.error.message}</p>}
-          <Button type="submit" size="lg" disabled={start.isPending} className="self-start font-heading font-bold">
+          <Button type="submit" size="lg" disabled={start.isPending || available.isPending}
+                  className="self-start font-heading font-bold">
             {start.isPending ? "Picking the first question…" : "Start the interview"}
           </Button>
         </form>

@@ -6,6 +6,7 @@ from app.agents import interview_coach as ic
 
 GOOD = "GRADE: good\nSKILL: caching\nFEEDBACK: Solid."
 MODERATE = "GRADE: moderate\nSKILL: caching\nFEEDBACK: Partial."
+BAD = "GRADE: bad\nSKILL: caching\nFEEDBACK: Missing."
 
 
 class PromptRoutedLLM:
@@ -18,8 +19,10 @@ class PromptRoutedLLM:
             "Probe deeper": follow_up,
             "Summarize": "Summary.",
         }
+        self.prompts: list[str] = []
 
     def invoke(self, prompt):
+        self.prompts.append(prompt)
         reply = next(text for marker, text in self.replies.items() if marker in prompt)
         return type("Reply", (), {"content": reply})()
 
@@ -114,6 +117,100 @@ def test_moderate_answer_can_get_a_follow_up(coach, monkeypatch):
     start(coach)
     turn = coach.submit_answer("t", "use a cache")
     assert (turn.question, turn.question_count) == ("What about eviction?", 1)
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "I don't know.",
+        "I don’t know",
+        "No idea, honestly. Just tell me the answer.",
+        "Can we skip?",
+    ],
+)
+def test_no_follow_up_after_an_answer_that_does_not_try(coach, monkeypatch, answer):
+    serve(monkeypatch, [question("q1")], [question("q2", "Next question")])
+    llm = PromptRoutedLLM(grade=BAD)
+    use_llm(monkeypatch, llm)
+    start(coach)
+    assert coach.submit_answer("t", answer).question == "Next question"
+    assert not any("routing logic" in prompt for prompt in llm.prompts)
+
+
+def test_a_bad_answer_that_tries_is_left_to_the_model(coach, monkeypatch):
+    serve(monkeypatch, [question("q1")])
+    use_llm(monkeypatch, PromptRoutedLLM(grade=BAD, follow_up="Why a list?"))
+    start(coach)
+    assert coach.submit_answer("t", "I would keep it in a list").question == "Why a list?"
+
+
+def test_an_earlier_i_dont_know_does_not_stop_a_follow_up_answer_being_probed(coach, monkeypatch):
+    serve(monkeypatch, [question("q1")])
+    llm = PromptRoutedLLM(grade=MODERATE, follow_up="Which item goes?")
+    use_llm(monkeypatch, llm)
+    start(coach)
+    coach.submit_answer("t", "I don't know its name. You keep the items in a list.")
+    llm.replies["Evaluate this answer"] = BAD
+    coach.submit_answer("t", "Drop the newest one")
+    assert sum("routing logic" in prompt for prompt in llm.prompts) == 2
+
+
+def test_not_knowing_the_follow_up_moves_on(coach, monkeypatch):
+    serve(monkeypatch, [question("q1")], [question("q2", "Next question")])
+    llm = PromptRoutedLLM(grade=MODERATE)
+    use_llm(monkeypatch, llm)
+    start(coach)
+    coach.submit_answer("t", "use a cache")  # moderate: the model asks a follow-up
+    llm.replies["Evaluate this answer"] = BAD
+    assert coach.submit_answer("t", "I don't know").question == "Next question"
+
+
+@pytest.mark.parametrize(
+    ("reply", "route"),
+    [
+        ("FOLLOW_UP", "ask_follow_up"),
+        ("**Follow-up**", "ask_follow_up"),
+        ("follow up", "ask_follow_up"),
+        ("NEW_QUESTION", "update_coverage"),
+        ("NEW_QUESTION. No FOLLOW_UP needed.", "update_coverage"),  # unclear: move on
+        ("", "update_coverage"),
+    ],
+)
+def test_the_router_reads_one_clear_decision(reply, route, monkeypatch, fake_llm):
+    monkeypatch.setattr(ic, "get_llm", lambda: fake_llm(reply))
+    entry = {"question_id": "q1", "question": "Q?", "answer": "a cache", "evaluation": "moderate"}
+    state = {"messages": [], "evaluation_report": [entry], "current_question_id": "q1"}
+    assert ic.decide_action_router(state) == route
+
+
+@pytest.mark.parametrize(
+    ("answer", "grade", "expected"),
+    [
+        ("", "moderate", True),
+        ("   ", "bad", True),
+        ("I do not know", "bad", True),
+        ("I haven't studied this", "bad", True),
+        ("Let's move on", "bad", True),
+        ("dunno", "bad", True),
+        ("I'd like to skip this question", "bad", True),
+        ("I would rather skip this one", "bad", True),
+        ("I don't know, would you mind moving on?", "bad", True),
+        ("I don't really know", "bad", True),
+        ("I can't answer that", "bad", True),
+        ("I'd use a hash map", "bad", False),
+        ("Can we skip this one?", "bad", True),
+        ("I'm not sure, but a mutex lets one thread in at a time", "bad", False),
+        ("Not sure. Maybe a hash map?", "bad", False),
+        ("I don't know, I think it's a lock", "bad", False),
+        ("I'd use a skip list here", "bad", False),
+        ("The scheduler will move on to the next process", "bad", False),
+        ("I don't know.", "moderate", False),  # the grader found something in it
+        ("TCP is reliable", "bad", False),
+        ("I know a process has its own memory", "bad", False),
+    ],
+)
+def test_answers_that_do_not_try_are_recognised(answer, grade, expected):
+    assert ic.did_not_attempt(answer, grade) is expected
 
 
 def test_follow_up_answer_updates_the_same_report_entry(coach, monkeypatch):
@@ -387,20 +484,101 @@ def test_retrieval_falls_back_to_no_difficulty_limit(monkeypatch):
 # --- Topic mapping ---
 
 
-def test_skill_gaps_map_to_topics_plus_system_design():
-    assert ic.topics_for_skill_gaps(["Docker", "react.js"]) == [
-        "Cloud & DevOps",
-        "Frontend Frameworks",
+# Each company names its topics its own way, as the question files do.
+FAKE_TOPICS = {
+    "generic": [
+        "Cloud & Infrastructure", "Coding (All Languages)", "Data Structures & Algorithms",
+        "Databases & Data Engineering", "Frameworks (Frontend)", "Programming Languages",
+        "RESTful APIs & Web Services", "System Design",
+    ],
+    "google": ["Networking", "System Design"],
+    "tiny": ["Security", "Networking", "Operating Systems"],
+}  # fmt: skip
+
+
+@pytest.fixture
+def topics(monkeypatch):
+    by_company = {
+        company: {name.lower(): name for name in names} for company, names in FAKE_TOPICS.items()
+    }
+    monkeypatch.setattr(ic, "_topic_names_by_company", lambda: by_company)
+
+
+def test_skill_gaps_map_to_the_companys_topics_plus_system_design(topics):
+    assert ic.topics_for_skill_gaps(["Docker", "react.js"], "generic") == [
+        "Cloud & Infrastructure",
+        "Frameworks (Frontend)",
         "System Design",
     ]
 
 
-def test_unmapped_skill_gaps_use_default_topics():
-    assert ic.topics_for_skill_gaps(["basket weaving"]) == ic.DEFAULT_TOPICS
+@pytest.mark.parametrize(
+    ("gap", "topic"),
+    [
+        ("mongodb", "Databases & Data Engineering"),
+        ("google cloud platform", "Cloud & Infrastructure"),
+        ("JavaScript", "Programming Languages"),  # preferred over "Coding (All Languages)"
+        ("Go", "Programming Languages"),
+        ("REST API design", "RESTful APIs & Web Services"),
+        ("REST APIs", "RESTful APIs & Web Services"),  # plural keyword
+    ],
+)
+def test_skill_gap_maps_to_its_own_topic(topics, gap, topic):
+    assert topic in ic.topics_for_skill_gaps([gap], "generic")
 
 
-def test_no_skill_gaps_use_default_topics():
-    assert ic.topics_for_skill_gaps([]) == ic.DEFAULT_TOPICS
+def test_unmapped_skill_gaps_use_default_topics(topics):
+    assert ic.topics_for_skill_gaps(["basket weaving"], "generic") == ic.DEFAULT_TOPICS
+
+
+def test_no_skill_gaps_use_default_topics(topics):
+    assert ic.topics_for_skill_gaps([], "generic") == ic.DEFAULT_TOPICS
+
+
+@pytest.mark.parametrize("gap", ["algorithms", "django", "cargo"])
+def test_words_containing_a_keyword_are_not_mapped(topics, gap):
+    assert ic.topics_for_skill_gaps([gap], "generic") == ic.DEFAULT_TOPICS
+
+
+def test_a_topic_the_company_has_no_questions_on_is_left_out(topics):
+    assert ic.topics_for_skill_gaps(["mongodb", "docker"], "google") == ["System Design"]
+
+
+def test_python_prefers_a_python_topic_and_java_a_general_coding_one(monkeypatch):
+    names = ["Coding (All Languages)", "Python & Language-Specific", "System Design"]
+    by_company = {"google": {name.lower(): name for name in names}}
+    monkeypatch.setattr(ic, "_topic_names_by_company", lambda: by_company)
+    assert ic.topics_for_skill_gaps(["python"], "google")[0] == "Python & Language-Specific"
+    assert ic.topics_for_skill_gaps(["java"], "google")[0] == "Coding (All Languages)"
+
+
+def test_a_company_without_the_default_topics_gets_its_first_topics(topics):
+    assert ic.topics_for_skill_gaps([], "tiny") == ["Networking", "Operating Systems"]
+
+
+def test_all_companies_offer_every_topic_once_a_to_z(topics):
+    offered = ic.interview_topics("all")
+    assert offered == sorted(set(offered), key=str.lower)
+    assert set(offered) == set(FAKE_TOPICS["generic"]) | set(FAKE_TOPICS["google"])
+
+
+def test_chosen_topics_are_matched_ignoring_case_and_spaces(topics):
+    found, unknown = ic.resolve_topics([" system design", "NETWORKING", "Networking"], "google")
+    assert (found, unknown) == (["System Design", "Networking"], [])
+
+
+def test_topics_without_questions_for_the_company_are_reported_as_typed(topics):
+    found, unknown = ic.resolve_topics(["Python", "System Design"], "google")
+    assert (found, unknown) == (["System Design"], ["Python"])
+
+
+def test_topic_names_are_shown_as_the_question_files_write_them():
+    assert "Data Structures & Algorithms" in ic.interview_topics("generic")
+
+
+@pytest.mark.parametrize("company", ic.COMPANIES)
+def test_every_company_has_questions_on_the_default_topics(company):
+    assert set(ic.DEFAULT_TOPICS) <= set(ic.interview_topics(company))
 
 
 def test_company_list_matches_the_question_files():
@@ -494,25 +672,6 @@ def test_failed_grading_moves_on_without_a_follow_up(coach, monkeypatch):
     assert coach.submit_answer("t", "answer").question == "Next question"
 
 
-@pytest.mark.parametrize(
-    ("gap", "topic"),
-    [
-        ("mongodb", "Databases"),
-        ("google cloud platform", "Cloud & DevOps"),
-        ("JavaScript", "Programming Languages"),
-        ("Go", "Programming Languages"),
-        ("REST API design", "System Design"),
-    ],
-)
-def test_skill_gap_maps_to_its_own_topic(gap, topic):
-    assert topic in ic.topics_for_skill_gaps([gap])
-
-
-@pytest.mark.parametrize("gap", ["algorithms", "django", "cargo"])
-def test_words_containing_a_keyword_are_not_mapped(gap):
-    assert ic.topics_for_skill_gaps([gap]) == ic.DEFAULT_TOPICS
-
-
 def test_rejected_start_leaves_the_thread_usable(coach, monkeypatch, fake_llm):
     serve(monkeypatch, [question("q1")])
     use_llm(monkeypatch, fake_llm(GOOD))
@@ -531,7 +690,7 @@ def test_empty_answer_is_graded_for_the_current_question(coach, monkeypatch):
     assert [e["question_id"] for e in coach.evaluation_report("t")] == ["q1"]
 
 
-def test_empty_answer_never_probes_an_earlier_question(coach, monkeypatch):
+def test_empty_answer_moves_on_instead_of_probing_an_earlier_question(coach, monkeypatch):
     class RecordingLLM(PromptRoutedLLM):
         follow_up_prompts = []
 
@@ -540,14 +699,20 @@ def test_empty_answer_never_probes_an_earlier_question(coach, monkeypatch):
                 self.follow_up_prompts.append(prompt)
             return super().invoke(prompt)
 
-    serve(monkeypatch, [question("q1", "Q-ONE")], [question("q2", "Q-TWO")], [question("q3")])
+    serve(
+        monkeypatch,
+        [question("q1", "Q-ONE")],
+        [question("q2", "Q-TWO")],
+        [question("q3", "Q-THREE")],
+    )
     llm = RecordingLLM()
     use_llm(monkeypatch, llm)
     start(coach)
     for _ in range(ic.MAX_FOLLOW_UPS_PER_QUESTION + 1):
         coach.submit_answer("t", "vague")
-    coach.submit_answer("t", "")
-    assert "Q-TWO" in llm.follow_up_prompts[-1] and "Q-ONE" not in llm.follow_up_prompts[-1]
+    follow_ups_so_far = len(llm.follow_up_prompts)
+    assert coach.submit_answer("t", "").question == "Q-THREE"
+    assert len(llm.follow_up_prompts) == follow_ups_so_far
 
 
 def test_follow_up_grade_updates_the_topic_history(coach, monkeypatch):
@@ -578,14 +743,18 @@ def test_summary_falls_back_when_the_llm_fails(coach, monkeypatch):
     )
 
 
-def test_follow_up_generation_failure_moves_on_politely(coach, monkeypatch):
+def test_a_follow_up_that_cannot_be_written_moves_on_to_the_next_question(coach, monkeypatch):
     class FollowUpDown(PromptRoutedLLM):
         def invoke(self, prompt):
             if "Probe deeper" in prompt:
                 raise RuntimeError("provider down")
             return super().invoke(prompt)
 
-    serve(monkeypatch, [question("q1")], [question("q2")])
+    serve(monkeypatch, [question("q1")], [question("q2", "Next question")])
     use_llm(monkeypatch, FollowUpDown())
     start(coach)
-    assert coach.submit_answer("t", "vague").question == "Let's move on."
+    turn = coach.submit_answer("t", "vague")
+    assert (turn.question, turn.question_count) == ("Next question", 2)
+    next_answer = coach.submit_answer("t", "an answer to the next question")
+    assert [e["question_id"] for e in coach.evaluation_report("t")] == ["q1", "q2"]
+    assert next_answer.question_count >= 2

@@ -20,13 +20,15 @@ export function stationSummaries(report: Report): Record<StationId, string | nul
   const skills = report.session.skills;
   const market = report.job_market;
   const path = report.learning_path?.path;
+  const uncovered = report.learning_path?.gaps_without_courses?.length ?? 0;
   const finishedInterviews = report.interviews.filter((i) => i.status === "succeeded").length;
   return {
     skills: skills.length ? `${plural(skills.length, "skill")}: ${skills.slice(0, 8).join(", ")}${skills.length > 8 ? "…" : ""}` : null,
     market: market
       ? `${plural(market.jobs.length, "posting")} read; top gaps: ${rankGaps(market).slice(0, 5).map((g) => g.skill).join(", ") || "none"}`
       : null,
-    path: path ? `${plural(path.recommendations.length, "course")} across ${plural(path.skill_gaps.length, "skill")}` : null,
+    path: path ? `${plural(path.recommendations.length, "course")} across ${plural(path.skill_gaps.length, "skill")}${
+      uncovered ? `; no course for ${uncovered}` : ""}` : null,
     resume: report.resume ? (report.resume.has_pdf ? "Resume written, PDF ready" : "Resume written (.tex)") :
       report.resume_review ? "Existing resume reviewed" : null,
     interview: finishedInterviews ? `${plural(finishedInterviews, "mock interview")} finished` : null,

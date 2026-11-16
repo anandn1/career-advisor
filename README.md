@@ -4,7 +4,7 @@
 
 The **Agentic AI Career Advisor** is an intelligent system designed to provide end-to-end career support. Powered by **Groq** for high-speed inference and **LangGraph** for stateful multi-agent orchestration, the application deploys a team of specialized AI agents to analyze job markets, craft resumes, and prepare candidates for interviews.
 
-> **Current Status:** The web app (FastAPI + Next.js) is working; Docker deployment is in development.
+> **Current Status:** The web app (FastAPI + Next.js) is working and runs with one `docker compose up`.
 
 ## System Architecture
 
@@ -33,11 +33,26 @@ graph TD
 ## Tech Stack
 
   * **Orchestration:** LangGraph (Stateful multi-agent workflows)
-  * **LLM Engine:** Groq (Llama 3 / Mixtral for near-instant inference)
+  * **LLM Engine:** Groq: gpt-oss-120b for the agents, gpt-oss-20b for resume writing (see [Language models](#language-models))
   * **Embeddings:** Google EmbeddingGemma 300M, 4-bit ONNX, run locally on the CPU (see [Embedding model](#embedding-model))
   * **Framework:** Python, LangChain
   * **Database:** PostgreSQL (SQLAlchemy + Alembic; LangGraph checkpoints)
   * **Vector Store:** ChromaDB (for RAG capabilities)
+
+## Language models
+
+The agents run on Groq. Which model does which job was decided by evals on the app's own
+tasks: 12 tasks, one per place an agent calls a model, scored against hand-checked labels and,
+for open-ended text, by a separate Gemini judge. The method, results and limits are in
+[backend/evals/README.md](backend/evals/README.md).
+
+| Used for | Model | Why |
+| :--- | :--- | :--- |
+| Every agent except resume writing | `openai/gpt-oss-120b`, medium reasoning | Graded interview answers 0.88 against 0.72 for 20b, chose follow-ups best (21/24), parsed every course search correctly |
+| Resume draft and LaTeX | `openai/gpt-oss-20b`, low reasoning | As good as 120b on resumes at half the price; 120b at medium skipped the required tool call on most drafts |
+
+Both can be changed with `LLM_MODEL`, `RESUME_LLM_MODEL` and their `*_REASONING_EFFORT`
+settings (see `.env.example`).
 
 ## Embedding model
 
@@ -107,7 +122,37 @@ uv run python -m app.agents.ingestion.seed_interview_db
 
 The course catalog is rebuilt on first use. Cached job postings are scraped again as you search.
 
-## Installation & Setup
+## Quick start with Docker
+
+You need Docker with Compose, a [Groq API key](https://console.groq.com/keys), and about
+4 GB of free RAM.
+
+```bash
+git clone https://github.com/anandn1/career-advisor.git
+cd career-advisor
+cp .env.example .env          # then set GROQ_API_KEY; the other keys are optional
+docker compose up --build
+```
+
+Open http://localhost:3000.
+
+The first start takes a few minutes: the backend creates its tables, loads the resume
+templates and builds the interview question store before it reports healthy, and the web app
+waits for it. Follow along with `docker compose logs -f backend`. Later starts skip this.
+
+What runs:
+
+| Service | What it is |
+| :--- | :--- |
+| `frontend` | Next.js on port 3000, the only port published. It forwards `/api/*` to the backend, so one address serves everything. |
+| `backend` | FastAPI with the agents, the embedding model (built into the image and checked against its fingerprints) and TeX Live for PDF resumes. |
+| `postgres` | Postgres 17 for sessions, runs, resume templates and interview checkpoints. |
+
+Data lives in two Docker volumes, `postgres-data` and `backend-data` (search stores and generated
+files), so it survives restarts. `docker compose down -v` deletes it. To serve the app on another
+port, set `PORT` in your `.env`.
+
+## Local development setup
 
 ### Prerequisites
 

@@ -93,6 +93,9 @@ def run_learning_path(session: CliSession) -> None:
     print(session.learning_path.user_summary)
     for rec in session.learning_path.recommendations:
         print(f"  - [{rec.skill_name}] {rec.course_title}: {rec.course_url}")
+    missing = curriculum_architect.gaps_without_courses(session.skill_gaps, session.learning_path)
+    if missing:
+        print(f"No course found for: {', '.join(missing)}")
 
 
 def run_resume(session: CliSession) -> None:
@@ -122,8 +125,8 @@ def run_resume(session: CliSession) -> None:
 
 def run_interview(session: CliSession) -> None:
     ensure_skill_gaps(session)
-    topics = interview_coach.topics_for_skill_gaps(session.skill_gaps)
     company = ask(f"Company focus ({', '.join(interview_coach.COMPANIES)}, all)", "generic")
+    topics = interview_coach.topics_for_skill_gaps(session.skill_gaps, company)
     thread_id = f"cli-{uuid.uuid4()}"
     print(f"Topics: {', '.join(topics)}. Type 'stop' to finish.")
     turn = interview_coach.start_interview(thread_id, topics, company)

@@ -1,0 +1,37 @@
+{
+  "about": "Checks the judge before its scores are trusted. Each pair has a good output and a deliberately bad one for the same input, scored with the same criteria the task uses. The judge passes a pair when the good output scores at least 0.75, the bad one below 0.5.",
+  "pairs": [
+    {
+      "id": "follow-up-praise-and-off-topic",
+      "task": "follow_up_question",
+      "source_case": "url-shortener-moderate",
+      "good": "How would you make sure two different long URLs never get the same short code?",
+      "bad": "Great answer, thanks! Can you tell me more about databases in general? Also, what's your favourite programming language?",
+      "bad_because": "Praise, two questions, and neither probes the gap in the answer"
+    },
+    {
+      "id": "summary-invents-results",
+      "task": "interview_summary",
+      "source_case": "mixed-session",
+      "good": "Strong on operating systems (all four deadlock conditions, prevention by lock ordering) and solid on system design, though capacity estimates were missing. Networking needs work: the candidate knew TCP is reliable but not why (handshake, sequencing, congestion control). Databases were the weakest area: indexing was confused with row numbering. Focus next on how TCP guarantees delivery and how B-tree indexes work.",
+      "bad": "An outstanding interview. The candidate excelled in every area, including an impressive deep dive into Kubernetes networking and React performance, and is clearly ready for a senior role.",
+      "bad_because": "Invents topics (Kubernetes, React) and hides the weak networking and databases results"
+    },
+    {
+      "id": "resume-invents-employer",
+      "task": "resume_generation",
+      "source_case": "backend-engineer",
+      "good": "\\begin{center}{\\LARGE Priya Sharma}\\\\ priya.sharma@example.com $|$ +91 98765 43210 $|$ Bengaluru, India\\end{center}\n\\section{Summary}\nBackend engineer building payment services in Go and Python on PostgreSQL, Kafka and Kubernetes. Cut p99 API latency by 40\\% with Redis caching and moved nightly settlement batches to streaming.\n\\section{Work Experience}\n\\textbf{Software Engineer}, Zeta Payments, Bengaluru \\hfill Jul 2022 -- Present\n\\begin{itemize}\n\\item Built payment reconciliation services in Go and Python (FastAPI) on PostgreSQL\n\\item Moved nightly batch jobs to Kafka streams, so settlement reports arrive within minutes instead of the next morning\n\\item Cut p99 API latency by 40\\% with Redis caching\n\\item Deployed services on Kubernetes (EKS) with Terraform\n\\end{itemize}\n\\textbf{Software Engineering Intern}, Infosys, Mysuru \\hfill Jan 2021 -- Jun 2021\n\\begin{itemize}\\item Wrote REST APIs in Java with Spring Boot for an internal HR tool\\end{itemize}\n\\section{Education}\nB.Tech in Computer Science, VIT Vellore \\hfill Graduated May 2022, GPA 8.7/10\n\\section{Skills}\n\\textbf{Languages:} Go, Python, Java \\quad \\textbf{Backend:} FastAPI, Spring Boot, PostgreSQL, Redis, Kafka \\quad \\textbf{Infrastructure:} Kubernetes, Terraform, Docker, Linux, Prometheus, Grafana, Git\n\\end{document}",
+      "bad": "\\begin{center}{\\LARGE Priya Sharma}\\\\ priya.sharma@example.com\\end{center}\n\\section{Summary}\nVisionary engineering leader who scaled systems to 50 million users at Google and Zeta Payments, increasing revenue by 300\\%.\n\\section{Work Experience}\n\\textbf{Staff Engineer}, Google, Mountain View \\hfill 2018 -- 2022\n\\begin{itemize}\\item Led a team of 40 engineers\\end{itemize}\n\\textbf{Head of Engineering}, Zeta Payments \\hfill 2022 -- Present\n\\begin{itemize}\\item Responsible for various backend things\\end{itemize}\n\\section{Education}\nM.Tech in Computer Science, IIT Bombay \\hfill 2020, GPA 9.8/10\n\\section{Skills}\nLeadership, Synergy, Go\n\\end{document}",
+      "bad_because": "Invents an employer, a degree, titles and metrics; vague bullets"
+    },
+    {
+      "id": "review-invents-experience",
+      "task": "resume_review",
+      "source_case": "mechanical-for-robotics-software",
+      "good": "{\"summary\": \"A solid mechanical design resume (SolidWorks, CATIA, ANSYS FEA, GD&T) but thin for a robotics software role: the only programming shown is MATLAB and Excel VBA.\", \"strengths\": [\"Hands-on CAD and FEA experience on real brake assemblies at Tata Motors\", \"Automation mindset shown by the Excel VBA bill-of-materials reports\", \"Quality background (Six Sigma Green Belt)\"], \"weaknesses\": [\"No C++ or Python, the core languages of robotics software\", \"No ROS, control or perception work\", \"Bullets lack measurable results\"], \"suggestions\": [\"Build and publish a small ROS 2 project, for example simulating a robot arm with a CAD model you designed\", \"Learn Python and port one MATLAB analysis to it\", \"Quantify the VBA automation, e.g. hours saved per report\", \"Retitle the summary toward mechatronics to bridge the two fields\"]}",
+      "bad": "{\"summary\": \"An excellent robotics software resume with strong Python, ROS and C++ experience.\", \"strengths\": [\"Extensive ROS experience\", \"Strong C++ skills\", \"Great team player\"], \"weaknesses\": [\"Could use a nicer font\", \"Resume is slightly long\", \"Add a photo\"], \"suggestions\": [\"Use more action verbs\", \"Make it look more modern\", \"Proofread it\"]}",
+      "bad_because": "Claims Python, ROS and C++ the resume never mentions; generic advice; ignores the real gaps"
+    }
+  ]
+}

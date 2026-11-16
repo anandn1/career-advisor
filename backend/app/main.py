@@ -11,6 +11,7 @@ from datetime import timedelta
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import TypeAdapter
 
 from app.api.routers import interviews, runs, sessions, templates
 from app.core.config import get_settings
@@ -71,6 +72,25 @@ async def lifespan(app: FastAPI):
         app.state.runner.shutdown()
 
 
+def _describe_run_bodies(app: FastAPI) -> None:
+    """Add the bodies POST /runs reads itself (JSON or a form) to the API description."""
+    build = app.openapi
+
+    def openapi() -> dict:
+        if app.openapi_schema:
+            return app.openapi_schema
+        schema = build()
+        components = schema.setdefault("components", {}).setdefault("schemas", {})
+        for name, body in runs.RUN_BODIES.values():
+            body_schema = TypeAdapter(body).json_schema(ref_template=runs.SCHEMA_REF)
+            for model, model_schema in body_schema.pop("$defs", {}).items():
+                components.setdefault(model, model_schema)
+            components[name] = body_schema
+        return schema
+
+    app.openapi = openapi
+
+
 def create_app() -> FastAPI:
     app = FastAPI(title="Agentic AI Career Advisor API", version="2.0.0", lifespan=lifespan)
     app.add_middleware(
@@ -79,8 +99,15 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    for module in (sessions, runs, interviews, templates):
-        app.include_router(module.router, prefix=API_PREFIX)
+    for router in (
+        sessions.router,
+        runs.router,
+        interviews.router,
+        interviews.topics_router,
+        templates.router,
+    ):
+        app.include_router(router, prefix=API_PREFIX)
+    _describe_run_bodies(app)
 
     @app.get("/health", tags=["health"])
     def health() -> dict:

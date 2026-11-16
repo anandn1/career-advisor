@@ -15,40 +15,6 @@
         "title": "AnswerRequest",
         "type": "object"
       },
-      "Body_extract_skills_from_resume_api_v1_sessions__session_id__runs_skills_resume_post": {
-        "properties": {
-          "file": {
-            "contentMediaType": "application/octet-stream",
-            "title": "File",
-            "type": "string"
-          }
-        },
-        "required": [
-          "file"
-        ],
-        "title": "Body_extract_skills_from_resume_api_v1_sessions__session_id__runs_skills_resume_post",
-        "type": "object"
-      },
-      "Body_review_resume_api_v1_sessions__session_id__runs_resume_review_post": {
-        "properties": {
-          "file": {
-            "contentMediaType": "application/octet-stream",
-            "title": "File",
-            "type": "string"
-          },
-          "request": {
-            "default": "",
-            "maxLength": 1000,
-            "title": "Request",
-            "type": "string"
-          }
-        },
-        "required": [
-          "file"
-        ],
-        "title": "Body_review_resume_api_v1_sessions__session_id__runs_resume_review_post",
-        "type": "object"
-      },
       "ContactInfo": {
         "properties": {
           "email": {
@@ -119,7 +85,7 @@
         "title": "Education",
         "type": "object"
       },
-      "GithubSkillsRequest": {
+      "GithubSkillsRun": {
         "properties": {
           "github_username": {
             "description": "Username or URL",
@@ -127,12 +93,18 @@
             "minLength": 1,
             "title": "Github Username",
             "type": "string"
+          },
+          "kind": {
+            "const": "skills_from_github",
+            "title": "Kind",
+            "type": "string"
           }
         },
         "required": [
+          "kind",
           "github_username"
         ],
-        "title": "GithubSkillsRequest",
+        "title": "GithubSkillsRun",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -236,6 +208,60 @@
         "title": "InterviewOut",
         "type": "object"
       },
+      "InterviewTopicsOut": {
+        "properties": {
+          "suggested": {
+            "description": "The topics for this session's skill gaps",
+            "items": {
+              "type": "string"
+            },
+            "title": "Suggested",
+            "type": "array"
+          },
+          "topics": {
+            "description": "Topics with questions for this company focus",
+            "items": {
+              "type": "string"
+            },
+            "title": "Topics",
+            "type": "array"
+          }
+        },
+        "required": [
+          "topics",
+          "suggested"
+        ],
+        "title": "InterviewTopicsOut",
+        "type": "object"
+      },
+      "JobMarketRun": {
+        "properties": {
+          "kind": {
+            "const": "job_market",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "JobMarketRun",
+        "type": "object"
+      },
+      "LearningPathRun": {
+        "properties": {
+          "kind": {
+            "const": "learning_path",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "LearningPathRun",
+        "type": "object"
+      },
       "Project": {
         "properties": {
           "description_bullets": {
@@ -310,10 +336,15 @@
         "title": "ResumeDraft",
         "type": "object"
       },
-      "ResumeRenderRequest": {
+      "ResumeRenderRun": {
         "properties": {
           "draft": {
             "$ref": "#/components/schemas/ResumeDraft"
+          },
+          "kind": {
+            "const": "resume_render",
+            "title": "Kind",
+            "type": "string"
           },
           "template_id": {
             "anyOf": [
@@ -324,16 +355,18 @@
                 "type": "null"
               }
             ],
+            "default": null,
             "title": "Template Id"
           }
         },
         "required": [
+          "kind",
           "draft"
         ],
-        "title": "ResumeRenderRequest",
+        "title": "ResumeRenderRun",
         "type": "object"
       },
-      "ResumeRequest": {
+      "ResumeRun": {
         "properties": {
           "contact": {
             "$ref": "#/components/schemas/ContactInfo"
@@ -360,6 +393,11 @@
             "title": "Include Github",
             "type": "boolean"
           },
+          "kind": {
+            "const": "resume",
+            "title": "Kind",
+            "type": "string"
+          },
           "template_id": {
             "anyOf": [
               {
@@ -369,6 +407,7 @@
                 "type": "null"
               }
             ],
+            "default": null,
             "title": "Template Id"
           },
           "work_experience": {
@@ -380,7 +419,10 @@
             "type": "array"
           }
         },
-        "title": "ResumeRequest",
+        "required": [
+          "kind"
+        ],
+        "title": "ResumeRun",
         "type": "object"
       },
       "RunKind": {
@@ -484,6 +526,35 @@
         "title": "RunOut",
         "type": "object"
       },
+      "RunRequest": {
+        "discriminator": {
+          "mapping": {
+            "job_market": "#/components/schemas/JobMarketRun",
+            "learning_path": "#/components/schemas/LearningPathRun",
+            "resume": "#/components/schemas/ResumeRun",
+            "resume_render": "#/components/schemas/ResumeRenderRun",
+            "skills_from_github": "#/components/schemas/GithubSkillsRun"
+          },
+          "propertyName": "kind"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/JobMarketRun"
+          },
+          {
+            "$ref": "#/components/schemas/LearningPathRun"
+          },
+          {
+            "$ref": "#/components/schemas/GithubSkillsRun"
+          },
+          {
+            "$ref": "#/components/schemas/ResumeRun"
+          },
+          {
+            "$ref": "#/components/schemas/ResumeRenderRun"
+          }
+        ]
+      },
       "RunStatus": {
         "enum": [
           "queued",
@@ -493,6 +564,38 @@
         ],
         "title": "RunStatus",
         "type": "string"
+      },
+      "RunUpload": {
+        "description": "The multipart form for runs that read a resume file.",
+        "properties": {
+          "file": {
+            "description": "The resume: .pdf, .docx or .txt",
+            "format": "binary",
+            "title": "File",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "skills_from_resume",
+              "resume_review"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "request": {
+            "default": "",
+            "description": "For resume_review",
+            "maxLength": 1000,
+            "title": "Request",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "file"
+        ],
+        "title": "RunUpload",
+        "type": "object"
       },
       "SessionCreate": {
         "properties": {
@@ -965,6 +1068,69 @@
         ]
       }
     },
+    "/api/v1/sessions/{session_id}/interview-topics": {
+      "get": {
+        "operationId": "list_topics_api_v1_sessions__session_id__interview_topics_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_focus",
+            "required": false,
+            "schema": {
+              "default": "generic",
+              "enum": [
+                "amazon",
+                "apple",
+                "google",
+                "meta",
+                "microsoft",
+                "netflix",
+                "nvidia",
+                "generic",
+                "all"
+              ],
+              "title": "Company Focus",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InterviewTopicsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Topics",
+        "tags": [
+          "interviews"
+        ]
+      }
+    },
     "/api/v1/sessions/{session_id}/interviews": {
       "post": {
         "operationId": "start_interview_api_v1_sessions__session_id__interviews_post",
@@ -1234,95 +1400,10 @@
         "tags": [
           "runs"
         ]
-      }
-    },
-    "/api/v1/sessions/{session_id}/runs/job-market": {
+      },
       "post": {
-        "operationId": "analyze_job_market_api_v1_sessions__session_id__runs_job_market_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "session_id",
-            "required": true,
-            "schema": {
-              "title": "Session Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "202": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RunOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Analyze Job Market",
-        "tags": [
-          "runs"
-        ]
-      }
-    },
-    "/api/v1/sessions/{session_id}/runs/learning-path": {
-      "post": {
-        "operationId": "build_learning_path_api_v1_sessions__session_id__runs_learning_path_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "session_id",
-            "required": true,
-            "schema": {
-              "title": "Session Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "202": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RunOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Build Learning Path",
-        "tags": [
-          "runs"
-        ]
-      }
-    },
-    "/api/v1/sessions/{session_id}/runs/resume": {
-      "post": {
-        "operationId": "generate_resume_api_v1_sessions__session_id__runs_resume_post",
+        "description": "Start a run of any kind: JSON picked by \"kind\", or a form for a resume file.",
+        "operationId": "start_run_api_v1_sessions__session_id__runs_post",
         "parameters": [
           {
             "in": "path",
@@ -1338,111 +1419,12 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ResumeRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "202": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RunOut"
-                }
+                "$ref": "#/components/schemas/RunRequest"
               }
             },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Generate Resume",
-        "tags": [
-          "runs"
-        ]
-      }
-    },
-    "/api/v1/sessions/{session_id}/runs/resume-render": {
-      "post": {
-        "operationId": "rerender_resume_api_v1_sessions__session_id__runs_resume_render_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "session_id",
-            "required": true,
-            "schema": {
-              "title": "Session Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ResumeRenderRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "202": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RunOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Rerender Resume",
-        "tags": [
-          "runs"
-        ]
-      }
-    },
-    "/api/v1/sessions/{session_id}/runs/resume-review": {
-      "post": {
-        "operationId": "review_resume_api_v1_sessions__session_id__runs_resume_review_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "session_id",
-            "required": true,
-            "schema": {
-              "title": "Session Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
             "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/Body_review_resume_api_v1_sessions__session_id__runs_resume_review_post"
+                "$ref": "#/components/schemas/RunUpload"
               }
             }
           },
@@ -1470,111 +1452,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Review Resume",
-        "tags": [
-          "runs"
-        ]
-      }
-    },
-    "/api/v1/sessions/{session_id}/runs/skills/github": {
-      "post": {
-        "operationId": "extract_skills_from_github_api_v1_sessions__session_id__runs_skills_github_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "session_id",
-            "required": true,
-            "schema": {
-              "title": "Session Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/GithubSkillsRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "202": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RunOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Extract Skills From Github",
-        "tags": [
-          "runs"
-        ]
-      }
-    },
-    "/api/v1/sessions/{session_id}/runs/skills/resume": {
-      "post": {
-        "operationId": "extract_skills_from_resume_api_v1_sessions__session_id__runs_skills_resume_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "session_id",
-            "required": true,
-            "schema": {
-              "title": "Session Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "multipart/form-data": {
-              "schema": {
-                "$ref": "#/components/schemas/Body_extract_skills_from_resume_api_v1_sessions__session_id__runs_skills_resume_post"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "202": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RunOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Extract Skills From Resume",
+        "summary": "Start Run",
         "tags": [
           "runs"
         ]
@@ -1714,9 +1592,10 @@
         ]
       }
     },
-    "/api/v1/sessions/{session_id}/runs/{run_id}/resume.pdf": {
+    "/api/v1/sessions/{session_id}/runs/{run_id}/resume": {
       "get": {
-        "operationId": "download_resume_pdf_api_v1_sessions__session_id__runs__run_id__resume_pdf_get",
+        "description": "The resume a run wrote: the PDF (shown in the page unless `download`) or its LaTeX.",
+        "operationId": "download_resume_api_v1_sessions__session_id__runs__run_id__resume_get",
         "parameters": [
           {
             "in": "path",
@@ -1733,6 +1612,20 @@
             "required": true,
             "schema": {
               "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "format",
+            "required": false,
+            "schema": {
+              "default": "pdf",
+              "enum": [
+                "pdf",
+                "tex"
+              ],
+              "title": "Format",
               "type": "string"
             }
           },
@@ -1767,56 +1660,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Download Resume Pdf",
-        "tags": [
-          "runs"
-        ]
-      }
-    },
-    "/api/v1/sessions/{session_id}/runs/{run_id}/resume.tex": {
-      "get": {
-        "operationId": "download_resume_latex_api_v1_sessions__session_id__runs__run_id__resume_tex_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "run_id",
-            "required": true,
-            "schema": {
-              "title": "Run Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "session_id",
-            "required": true,
-            "schema": {
-              "title": "Session Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Download Resume Latex",
+        "summary": "Download Resume",
         "tags": [
           "runs"
         ]

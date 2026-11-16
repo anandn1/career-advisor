@@ -1,0 +1,515 @@
+{
+  "about": "Curriculum architect. 'planner': the gap list the planner must extract in full (each a group of accepted spellings) and the skill levels that fit the inventory. 'course_parsing': fake web-search results; courses that must be extracted, may be, and must not be (non-courses). 'critic': learning paths with the verdict the lenient critic should reach. 'end_to_end': full runs on gaps the built-in catalog covers, so no web search is needed; every recommended URL must come from the catalog.",
+  "planner": [
+    {
+      "id": "backend-gaps",
+      "gaps": "Kubernetes\nDocker\nFastAPI\nPostgreSQL\nAWS\nTerraform\nRedis\nCI/CD",
+      "inventory": {
+        "skills": [
+          "Python",
+          "Flask",
+          "Git",
+          "SQL"
+        ],
+        "target_role": "Backend Engineer"
+      },
+      "expected": [
+        [
+          "Kubernetes"
+        ],
+        [
+          "Docker"
+        ],
+        [
+          "FastAPI"
+        ],
+        [
+          "PostgreSQL",
+          "Postgres"
+        ],
+        [
+          "AWS",
+          "Amazon Web Services"
+        ],
+        [
+          "Terraform"
+        ],
+        [
+          "Redis"
+        ],
+        [
+          "CI/CD",
+          "CI CD",
+          "Continuous Integration"
+        ]
+      ],
+      "skill_levels": [
+        "Beginner",
+        "Intermediate"
+      ]
+    },
+    {
+      "id": "twelve-frontend-gaps",
+      "about": "The prompt says: if 10+ gaps are listed, extract all of them.",
+      "gaps": "React\nTypeScript\nNext.js\nGraphQL\nJest\nCypress\nTailwind CSS\nWebpack\nRedux\nWeb Accessibility\nWeb Performance\nStorybook",
+      "inventory": {
+        "skills": [
+          "HTML",
+          "CSS",
+          "JavaScript",
+          "jQuery"
+        ],
+        "target_role": "Frontend Developer"
+      },
+      "expected": [
+        [
+          "React"
+        ],
+        [
+          "TypeScript"
+        ],
+        [
+          "Next.js",
+          "NextJS"
+        ],
+        [
+          "GraphQL"
+        ],
+        [
+          "Jest"
+        ],
+        [
+          "Cypress"
+        ],
+        [
+          "Tailwind CSS",
+          "Tailwind"
+        ],
+        [
+          "Webpack"
+        ],
+        [
+          "Redux"
+        ],
+        [
+          "Web Accessibility",
+          "Accessibility"
+        ],
+        [
+          "Web Performance",
+          "Performance"
+        ],
+        [
+          "Storybook"
+        ]
+      ],
+      "skill_levels": [
+        "Beginner",
+        "Intermediate"
+      ]
+    },
+    {
+      "id": "ml-gaps-with-duplicates",
+      "gaps": "LangChain\nlangchain\nLLM\nVector Databases\nPython\nMachine Learning\nPrompt Engineering",
+      "inventory": {
+        "skills": [
+          "Java",
+          "Spring Boot",
+          "Microservices",
+          "AWS",
+          "Kafka",
+          "System Design"
+        ],
+        "target_role": "Machine Learning Engineer"
+      },
+      "expected": [
+        [
+          "LangChain"
+        ],
+        [
+          "LLM",
+          "LLMs",
+          "Large Language Models"
+        ],
+        [
+          "Vector Databases",
+          "Vector Database",
+          "Vector DBs"
+        ],
+        [
+          "Python"
+        ],
+        [
+          "Machine Learning",
+          "ML"
+        ],
+        [
+          "Prompt Engineering"
+        ]
+      ],
+      "skill_levels": [
+        "Beginner",
+        "Intermediate",
+        "Advanced"
+      ]
+    }
+  ],
+  "course_parsing": [
+    {
+      "id": "terraform",
+      "skill": "Terraform",
+      "results": [
+        {
+          "title": "HashiCorp Certified: Terraform Associate 2026 | Udemy",
+          "url": "https://www.udemy.com/course/terraform-beginner-to-advanced/",
+          "content": "Learn Terraform from scratch: providers, state, modules and workspaces. 12 hours of video, hands-on labs on AWS, prepares you for the Terraform Associate exam. No prior Terraform experience needed.",
+          "score": 0.91
+        },
+        {
+          "title": "Get Started - AWS | Terraform | HashiCorp Developer",
+          "url": "https://developer.hashicorp.com/terraform/tutorials/aws-get-started",
+          "content": "Free official tutorial series: install Terraform, build, change and destroy AWS infrastructure, define input variables and query outputs.",
+          "score": 0.88
+        },
+        {
+          "title": "Is Terraform still worth learning in 2026? : r/devops",
+          "url": "https://www.reddit.com/r/devops/comments/abc123/is_terraform_still_worth_learning/",
+          "content": "I keep hearing OpenTofu and Pulumi are replacing it. Thoughts? 143 comments.",
+          "score": 0.62
+        },
+        {
+          "title": "Terraform vs Pulumi: which IaC tool should you pick?",
+          "url": "https://blog.example.dev/terraform-vs-pulumi",
+          "content": "A comparison of HCL and general-purpose languages for infrastructure as code, with pros and cons of each tool.",
+          "score": 0.55
+        }
+      ],
+      "required": [
+        "https://www.udemy.com/course/terraform-beginner-to-advanced/"
+      ],
+      "allowed": [
+        "https://developer.hashicorp.com/terraform/tutorials/aws-get-started"
+      ],
+      "forbidden": [
+        "https://www.reddit.com/r/devops/comments/abc123/is_terraform_still_worth_learning/",
+        "https://blog.example.dev/terraform-vs-pulumi"
+      ]
+    },
+    {
+      "id": "graphql",
+      "skill": "GraphQL",
+      "results": [
+        {
+          "title": "GraphQL by Example | Udemy",
+          "url": "https://www.udemy.com/course/graphql-by-example/",
+          "content": "Build GraphQL APIs with Apollo Server and query them from React with Apollo Client. Schemas, resolvers, mutations, authentication. Requires JavaScript and basic React.",
+          "score": 0.9
+        },
+        {
+          "title": "How to GraphQL - The Fullstack Tutorial for GraphQL",
+          "url": "https://www.howtographql.com/",
+          "content": "Free open-source tutorial covering GraphQL fundamentals and backend and frontend tracks for Node.js, React and more.",
+          "score": 0.87
+        },
+        {
+          "title": "Senior GraphQL Engineer - Acme Corp - Remote",
+          "url": "https://jobs.example.com/acme/senior-graphql-engineer",
+          "content": "We are hiring a Senior GraphQL Engineer with 5+ years of experience in Apollo Federation. Competitive salary.",
+          "score": 0.6
+        },
+        {
+          "title": "Client-Side GraphQL in React | Frontend Masters",
+          "url": "https://frontendmasters.com/courses/client-graphql-react/",
+          "content": "Course on using GraphQL from React apps: queries, mutations, caching with Apollo Client and urql, optimistic updates.",
+          "score": 0.84
+        }
+      ],
+      "required": [
+        "https://www.udemy.com/course/graphql-by-example/",
+        "https://www.howtographql.com/",
+        "https://frontendmasters.com/courses/client-graphql-react/"
+      ],
+      "allowed": [],
+      "forbidden": [
+        "https://jobs.example.com/acme/senior-graphql-engineer"
+      ]
+    }
+  ],
+  "critic": [
+    {
+      "id": "complete-path",
+      "expected_approved": true,
+      "path": {
+        "user_summary": "A Python developer with Flask and SQL experience moving into backend engineering. They need container and API framework skills to work on production services.",
+        "skill_gaps": [
+          "FastAPI",
+          "Docker",
+          "PostgreSQL"
+        ],
+        "recommendations": [
+          {
+            "skill_name": "FastAPI",
+            "course_title": "FastAPI for Beginners",
+            "course_url": "https://fastapi.tiangolo.com/tutorial/",
+            "description": "Official tutorial covering routes, validation and dependency injection."
+          },
+          {
+            "skill_name": "Docker",
+            "course_title": "Docker for Beginners",
+            "course_url": "https://docker-curriculum.com/",
+            "description": "Containers, images and Compose through a hands-on project."
+          },
+          {
+            "skill_name": "PostgreSQL",
+            "course_title": "PostgreSQL: SQL & Database Management",
+            "course_url": "https://www.postgresql.org/docs/current/tutorial.html",
+            "description": "The official PostgreSQL tutorial, from tables to transactions."
+          }
+        ]
+      }
+    },
+    {
+      "id": "one-gap-uncovered",
+      "expected_approved": true,
+      "about": "One of four gaps (25%) has no course: the prompt says approve unless more than half are uncovered.",
+      "path": {
+        "user_summary": "A frontend developer who knows JavaScript and wants to move to a typed React stack.",
+        "skill_gaps": [
+          "React",
+          "TypeScript",
+          "Next.js",
+          "GraphQL"
+        ],
+        "recommendations": [
+          {
+            "skill_name": "React",
+            "course_title": "React - The Complete Guide",
+            "course_url": "https://react.dev/learn",
+            "description": "Components, state and hooks."
+          },
+          {
+            "skill_name": "TypeScript",
+            "course_title": "TypeScript Handbook",
+            "course_url": "https://www.typescriptlang.org/docs/handbook/intro.html",
+            "description": "Types, generics and narrowing."
+          },
+          {
+            "skill_name": "Next.js",
+            "course_title": "Learn Next.js",
+            "course_url": "https://nextjs.org/learn",
+            "description": "Routing, data fetching and deployment."
+          }
+        ]
+      }
+    },
+    {
+      "id": "most-gaps-uncovered",
+      "expected_approved": false,
+      "path": {
+        "user_summary": "A Java developer moving into cloud infrastructure work.",
+        "skill_gaps": [
+          "Kubernetes",
+          "Terraform",
+          "AWS",
+          "Prometheus"
+        ],
+        "recommendations": [
+          {
+            "skill_name": "Kubernetes",
+            "course_title": "Kubernetes Basics",
+            "course_url": "https://kubernetes.io/docs/tutorials/kubernetes-basics/",
+            "description": "Deploy, scale and update an app on a cluster."
+          }
+        ]
+      }
+    },
+    {
+      "id": "empty-summary-misaligned",
+      "expected_approved": false,
+      "path": {
+        "user_summary": "",
+        "skill_gaps": [
+          "Kubernetes",
+          "Docker"
+        ],
+        "recommendations": [
+          {
+            "skill_name": "Excel",
+            "course_title": "Excel Pivot Tables Masterclass",
+            "course_url": "https://www.example.com/excel-pivots",
+            "description": "Summarise spreadsheets with pivot tables."
+          },
+          {
+            "skill_name": "Public Speaking",
+            "course_title": "Confident Presentations",
+            "course_url": "https://www.example.com/speaking",
+            "description": "Overcome stage fright."
+          }
+        ]
+      }
+    },
+    {
+      "id": "recommendations-off-topic",
+      "expected_approved": false,
+      "path": {
+        "user_summary": "A data analyst who wants to become a machine learning engineer and needs deep-learning and deployment skills.",
+        "skill_gaps": [
+          "PyTorch",
+          "MLflow",
+          "Docker"
+        ],
+        "recommendations": [
+          {
+            "skill_name": "PyTorch",
+            "course_title": "Watercolor Painting for Beginners",
+            "course_url": "https://www.example.com/watercolor",
+            "description": "Learn basic brush techniques."
+          },
+          {
+            "skill_name": "MLflow",
+            "course_title": "Italian Cooking at Home",
+            "course_url": "https://www.example.com/pasta",
+            "description": "Fresh pasta from scratch."
+          },
+          {
+            "skill_name": "Docker",
+            "course_title": "Marathon Training Plan",
+            "course_url": "https://www.example.com/marathon",
+            "description": "Sixteen weeks to race day."
+          }
+        ]
+      }
+    },
+    {
+      "id": "four-gaps-all-covered",
+      "expected_approved": true,
+      "path": {
+        "user_summary": "A Java developer with Spring Boot experience moving into cloud-native backend work. They need container, orchestration and infrastructure-as-code skills for production deployments.",
+        "skill_gaps": [
+          "Docker",
+          "Kubernetes",
+          "Terraform",
+          "AWS"
+        ],
+        "recommendations": [
+          {
+            "skill_name": "Docker",
+            "course_title": "Docker for Beginners",
+            "course_url": "https://docker-curriculum.com/",
+            "description": "Images, containers and Compose through a hands-on project."
+          },
+          {
+            "skill_name": "Kubernetes",
+            "course_title": "Kubernetes Basics",
+            "course_url": "https://kubernetes.io/docs/tutorials/kubernetes-basics/",
+            "description": "Deploy, scale and update an app on a cluster."
+          },
+          {
+            "skill_name": "Terraform",
+            "course_title": "Get Started - AWS",
+            "course_url": "https://developer.hashicorp.com/terraform/tutorials/aws-get-started",
+            "description": "Build, change and destroy AWS infrastructure with Terraform."
+          },
+          {
+            "skill_name": "AWS",
+            "course_title": "AWS Cloud Practitioner Essentials",
+            "course_url": "https://explore.skillbuilder.aws/learn/course/134/aws-cloud-practitioner-essentials",
+            "description": "Core AWS services, pricing and the shared responsibility model."
+          }
+        ]
+      }
+    },
+    {
+      "id": "two-courses-per-gap",
+      "expected_approved": true,
+      "path": {
+        "user_summary": "A data analyst fluent in SQL and Excel who wants to move into machine learning. They need Python data tooling and modelling fundamentals.",
+        "skill_gaps": [
+          "pandas",
+          "scikit-learn"
+        ],
+        "recommendations": [
+          {
+            "skill_name": "pandas",
+            "course_title": "Data Science with Pandas",
+            "course_url": "https://www.datacamp.com/courses/pandas-foundations",
+            "description": "DataFrames, cleaning and aggregation."
+          },
+          {
+            "skill_name": "pandas",
+            "course_title": "pandas Getting Started Tutorials",
+            "course_url": "https://pandas.pydata.org/docs/getting_started/intro_tutorials/",
+            "description": "The official introduction to pandas."
+          },
+          {
+            "skill_name": "scikit-learn",
+            "course_title": "scikit-learn MOOC",
+            "course_url": "https://inria.github.io/scikit-learn-mooc/",
+            "description": "Predictive modelling with scikit-learn, from Inria."
+          },
+          {
+            "skill_name": "scikit-learn",
+            "course_title": "Machine Learning Specialization",
+            "course_url": "https://www.coursera.org/specializations/machine-learning-introduction",
+            "description": "Supervised learning foundations by Andrew Ng."
+          }
+        ]
+      }
+    },
+    {
+      "id": "nonsense-summary",
+      "expected_approved": false,
+      "about": "The prompt says reject when the summary is missing or nonsensical.",
+      "path": {
+        "user_summary": "asdf lorem ipsum user user summary TODO.",
+        "skill_gaps": [
+          "Redis",
+          "Kafka"
+        ],
+        "recommendations": [
+          {
+            "skill_name": "Redis",
+            "course_title": "Redis University: Redis for Developers",
+            "course_url": "https://redis.io/university/",
+            "description": "Data structures, caching and persistence."
+          },
+          {
+            "skill_name": "Kafka",
+            "course_title": "Apache Kafka Fundamentals",
+            "course_url": "https://developer.confluent.io/courses/apache-kafka/events/",
+            "description": "Topics, partitions, producers and consumers."
+          }
+        ]
+      }
+    }
+  ],
+  "end_to_end": [
+    {
+      "id": "backend-developer",
+      "gaps": [
+        "FastAPI",
+        "Docker",
+        "PostgreSQL"
+      ],
+      "user_skills": [
+        "Python",
+        "Git"
+      ],
+      "target_role": "Backend Developer"
+    },
+    {
+      "id": "full-stack-developer",
+      "gaps": [
+        "React",
+        "TypeScript",
+        "Kubernetes"
+      ],
+      "user_skills": [
+        "JavaScript",
+        "HTML",
+        "CSS"
+      ],
+      "target_role": "Full-stack Developer"
+    }
+  ]
+}

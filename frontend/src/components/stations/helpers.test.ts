@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Report } from "@/hooks/use-career";
 import type { Interview } from "@/lib/api/client";
-import { linesForTurn, parseTopics } from "@/components/stations/interview-station";
+import { linesForTurn, toggleTopic, topicHint } from "@/components/stations/interview-station";
 import { rankGaps } from "@/components/stations/market-station";
 import { groupBySkill } from "@/components/stations/path-station";
 import { stationSummaries } from "@/components/stations/report-station";
@@ -105,12 +105,21 @@ describe("interview helpers", () => {
     expect(linesForTurn(interview(null))).toEqual([]);
   });
 
-  it("splits topics on commas and drops blanks", () => {
-    expect(parseTopics(" Databases, , System Design ")).toEqual(["Databases", "System Design"]);
+  it("adds a topic that is not chosen yet, at the end", () => {
+    expect(toggleTopic(["Databases"], "Networking")).toEqual(["Databases", "Networking"]);
   });
 
-  it("returns null when no topics are given, so the server picks them", () => {
-    expect(parseTopics(" , ")).toBeNull();
+  it("removes a chosen topic and keeps the order of the rest", () => {
+    expect(toggleTopic(["A", "B", "C"], "B")).toEqual(["A", "C"]);
+  });
+
+  it.each([
+    [false, 2, "Picked from your skill gaps. Tap to change."],
+    [true, 2, "2 chosen."],
+    [false, 0, "None chosen: you get the usual topics for this company."],
+    [true, 0, "None chosen: you get the usual topics for this company."],
+  ])("explains the topic choice (picked by user: %s, chosen: %i)", (picked, count, hint) => {
+    expect(topicHint(picked, count)).toBe(hint);
   });
 });
 
@@ -140,6 +149,13 @@ describe("stationSummaries", () => {
       resume: "Resume written, PDF ready",
       interview: "1 mock interview finished",
     });
+  });
+
+  it("counts the gaps the learning path found no course for", () => {
+    const course = { skill_name: "go", course_title: "A", course_url: "u", description: "d" };
+    const path = { user_summary: "", skill_gaps: ["go"], recommendations: [course] };
+    const report: Report = { ...empty, learning_path: { run_id: "p", path, gaps_without_courses: ["rust", "zig"] } };
+    expect(stationSummaries(report).path).toBe("1 course across 1 skill; no course for 2");
   });
 
   it("uses plurals for counts other than one", () => {

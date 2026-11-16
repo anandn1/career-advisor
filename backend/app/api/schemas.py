@@ -52,11 +52,25 @@ class RunOut(BaseModel):
     finished_at: datetime | None
 
 
-class GithubSkillsRequest(BaseModel):
+# Starting a run: POST /sessions/{id}/runs with one of these JSON bodies, picked by "kind".
+# The two kinds that read a file (UPLOAD_KINDS) are sent as a multipart form instead.
+
+
+class JobMarketRun(BaseModel):
+    kind: Literal[RunKind.JOB_MARKET]
+
+
+class LearningPathRun(BaseModel):
+    kind: Literal[RunKind.LEARNING_PATH]
+
+
+class GithubSkillsRun(BaseModel):
+    kind: Literal[RunKind.SKILLS_FROM_GITHUB]
     github_username: str = Field(min_length=1, max_length=200, description="Username or URL")
 
 
-class ResumeRequest(BaseModel):
+class ResumeRun(BaseModel):
+    kind: Literal[RunKind.RESUME]
     contact: ContactInfo = Field(default_factory=ContactInfo)
     education: list[Education] = Field(default_factory=list, max_length=20)
     work_experience: list[WorkExperience] = Field(default_factory=list, max_length=30)
@@ -65,9 +79,25 @@ class ResumeRequest(BaseModel):
     template_id: str | None = None
 
 
-class ResumeRenderRequest(BaseModel):
+class ResumeRenderRun(BaseModel):
+    kind: Literal[RunKind.RESUME_RENDER]
     draft: ResumeDraft
     template_id: str | None = None
+
+
+RunRequest = Annotated[
+    JobMarketRun | LearningPathRun | GithubSkillsRun | ResumeRun | ResumeRenderRun,
+    Field(discriminator="kind"),
+]
+UPLOAD_KINDS = (RunKind.SKILLS_FROM_RESUME, RunKind.RESUME_REVIEW)
+
+
+class RunUpload(BaseModel):
+    """The multipart form for runs that read a resume file."""
+
+    kind: Literal[RunKind.SKILLS_FROM_RESUME, RunKind.RESUME_REVIEW]
+    file: bytes = Field(description="The resume: .pdf, .docx or .txt")
+    request: str = Field("", max_length=MAX_REQUEST_LENGTH, description="For resume_review")
 
 
 class InterviewCreate(BaseModel):
@@ -77,6 +107,11 @@ class InterviewCreate(BaseModel):
 
 class AnswerRequest(BaseModel):
     answer: str = Field(max_length=MAX_ANSWER_LENGTH)
+
+
+class InterviewTopicsOut(BaseModel):
+    topics: list[str] = Field(description="Topics with questions for this company focus")
+    suggested: list[str] = Field(description="The topics for this session's skill gaps")
 
 
 class TurnOut(BaseModel):

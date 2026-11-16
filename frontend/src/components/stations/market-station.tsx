@@ -28,7 +28,7 @@ function sourceLabel(job: Job): string {
   return "Live";
 }
 
-function MarketResults({ result }: { result: JobMarketResult }) {
+export function MarketResults({ result }: { result: JobMarketResult }) {
   const gaps = rankGaps(result);
   const total = result.jobs.length;
   return (
@@ -63,7 +63,14 @@ function MarketResults({ result }: { result: JobMarketResult }) {
             {result.jobs.map((job, index) => (
               <li key={`${job.company}-${job.title}-${index}`} className="flex flex-col gap-1.5 p-4">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <span className="font-heading font-bold">{job.title}</span>
+                  {job.url ? (
+                    <a href={job.url} target="_blank" rel="noreferrer"
+                       className="font-heading font-bold underline decoration-line-market decoration-2 underline-offset-4 hover:decoration-4">
+                      {job.title}{" "}<span className="sr-only">(opens on LinkedIn)</span>
+                    </a>
+                  ) : (
+                    <span className="font-heading font-bold">{job.title}</span>
+                  )}
                   <span className="signage text-[0.65rem] text-ink-muted">{sourceLabel(job)}</span>
                 </div>
                 <span className="text-sm text-ink-muted">{job.company} · {job.location}</span>
@@ -83,8 +90,8 @@ export function MarketStation() {
   const session = useCurrentSession();
   const { latest } = useLatestRun(session.id, MARKET.kinds);
   const start = useStartRun(session.id, async () =>
-    unwrap(await api.POST("/api/v1/sessions/{session_id}/runs/job-market", {
-      params: { path: { session_id: session.id } },
+    unwrap(await api.POST("/api/v1/sessions/{session_id}/runs", {
+      params: { path: { session_id: session.id } }, body: { kind: "job_market" },
     })));
   const busy = start.isPending || (latest !== undefined && !isFinished(latest));
 

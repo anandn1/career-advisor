@@ -52,6 +52,34 @@ def test_cached_jobs_are_labeled_with_their_scrape_date():
     assert (job["source"], job["scraped_at"]) == ("cached", "2026-10-01")
 
 
+def test_cached_jobs_link_to_their_linkedin_posting():
+    document = posting_document(source="https://www.linkedin.com/jobs/view/42?trk=x#top")
+    assert jma._document_to_job(document)["url"] == "https://www.linkedin.com/jobs/view/42"
+
+
+@pytest.mark.parametrize(
+    "link",
+    [
+        None,
+        "N/A",
+        "",
+        "http://www.linkedin.com/jobs/view/42",  # not https
+        "https://linkedin.com.evil.example/jobs/42",
+        "https://evil.example/?u=linkedin.com",
+        "javascript:alert(1)",
+    ],
+)
+def test_postings_without_a_linkedin_address_get_no_link(link):
+    document = posting_document(source=link) if link is not None else posting_document()
+    assert jma._document_to_job(document)["url"] is None
+
+
+def test_the_bare_linkedin_host_is_accepted():
+    assert (
+        jma._posting_url("https://linkedin.com/jobs/view/7") == "https://linkedin.com/jobs/view/7"
+    )
+
+
 @pytest.mark.parametrize("title", [None, "", "N/A"])
 def test_missing_title_falls_back_to_the_content(title):
     document = posting_document(title="Data Engineer")
@@ -112,7 +140,7 @@ def scraper(monkeypatch):
             "title": "Dev A",
             "company": "Acme",
             "location": "Pune",
-            "link": "https://x/a",
+            "link": "https://in.linkedin.com/jobs/view/dev-a-1?refId=r&trackingId=t",
         },
         {
             "title": "Dev B",
@@ -124,7 +152,7 @@ def scraper(monkeypatch):
     ]
 
     def fetch_description(link):
-        if link.endswith("/b"):
+        if link.endswith("/b"):  # Dev B's link
             raise job_scraper.ScraperError("blocked")
         return {"link": link, "skills required": ["go", "docker"]}
 
@@ -142,6 +170,11 @@ def run_scrape(monkeypatch, cached_jobs=(), store=None):
 def test_live_postings_are_labeled_live(scraper, monkeypatch):
     jobs, _ = run_scrape(monkeypatch)
     assert [(j["title"], j["source"]) for j in jobs] == [("Dev A", "live")]
+
+
+def test_live_postings_link_to_linkedin_without_tracking(scraper, monkeypatch):
+    jobs, _ = run_scrape(monkeypatch)
+    assert [j["url"] for j in jobs] == ["https://in.linkedin.com/jobs/view/dev-a-1"]
 
 
 def test_failed_and_linkless_postings_are_skipped(scraper, monkeypatch):
@@ -216,6 +249,77 @@ def test_gaps_are_skills_the_user_lacks():
 
 def test_skill_names_are_normalized_before_comparing():
     assert analyze(["react-js", "Node.JS"], ["React JS", "node.js."])["skill_gaps"] == []
+
+
+def test_a_more_specific_user_skill_covers_the_gap():
+    assert analyze(["AWS Lambda"], ["aws", "kafka"])["skill_gaps"] == ["kafka"]
+
+
+def test_soft_skills_are_not_gaps():
+    gaps = analyze([], ["communication", "Problem-Solving", "Scrum", "kafka"])["skill_gaps"]
+    assert gaps == ["kafka"]
+
+
+def test_spellings_of_one_skill_are_one_gap_under_its_shortest_name():
+    result = analyze([], ["microservices architecture"], ["Microservices", "kafka"])
+    assert sorted(result["skill_gaps"]) == ["kafka", "microservices"]
+    assert [job["gaps"] for job in result["gaps_per_job"]] == [
+        ["microservices"],
+        ["kafka", "microservices"],
+    ]
+
+
+def test_gaps_most_postings_ask_for_come_first():
+    # Alphabetical order would be ada, kafka, zig.
+    result = analyze([], ["zig", "kafka", "ada"], ["zig", "kafka"], ["zig"])
+    assert result["skill_gaps"] == ["zig", "kafka", "ada"]
+
+
+@pytest.mark.parametrize("blank", ["  ", "-", "\n"])
+def test_blank_skills_in_postings_are_not_gaps(blank):
+    result = analyze([], [blank, "docker"])
+    assert result["skill_gaps"] == ["docker"]
+    assert result["gaps_per_job"][0]["gaps"] == ["docker"]
+    assert result["all_required_skills"] == ["docker"]
+
+
+def test_a_posting_that_repeats_a_skill_counts_it_once():
+    result = analyze(
+        [], ["Docker", "docker", "microservices", "Microservices Architecture"], ["kafka"]
+    )
+    assert [(job["gaps"], job["gap_count"]) for job in result["gaps_per_job"]] == [
+        (["docker", "microservices"], 2),
+        (["kafka"], 1),
+    ]
+    assert result["skill_gaps"] == ["docker", "kafka", "microservices"]
+
+
+def test_a_posting_without_a_skills_list_has_no_gaps():
+    jobs = [{"title": "J", "company": "C", "skills_required": None}]
+    state = {"role": "Dev", "location": "Pune", "user_skills": [], "job_data": jobs}
+    result = jma.analyze_skill_gaps(state)["skill_gap_data"]
+    assert (result["skill_gaps"], result["gaps_per_job"][0]["gap_count"]) == ([], 0)
+
+
+def test_padded_skills_in_postings_are_trimmed():
+    assert analyze([], [" docker\n", "Docker."])["skill_gaps"] == ["docker"]
+
+
+def test_gaps_asked_for_equally_often_are_in_alphabetical_order():
+    assert analyze([], ["zig", "ada", "go"])["skill_gaps"] == ["ada", "go", "zig"]
+
+
+def test_each_posting_lists_only_its_own_gaps():
+    result = analyze(["Go"], ["go", "communication", "rust"], ["kafka"])
+    assert [(job["gaps"], job["gap_count"]) for job in result["gaps_per_job"]] == [
+        (["rust"], 1),
+        (["kafka"], 1),
+    ]
+
+
+def test_all_required_skills_still_lists_every_skill_asked_for():
+    result = analyze(["Go"], ["go", "communication"])
+    assert result["all_required_skills"] == ["communication", "go"]
 
 
 def test_average_gaps_counts_every_job():

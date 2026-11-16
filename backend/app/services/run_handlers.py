@@ -9,6 +9,7 @@ from app.agents.resume_strategist import (
     generate_resume,
     render_latex,
 )
+from app.core.config import get_settings
 from app.db.models import ResumeFile, RunKind
 from app.db.session import session_scope
 from app.db.templates import get_template
@@ -60,7 +61,13 @@ def learning_path(context: RunContext) -> dict:
     path = state.get("draft_path")
     if path is None:
         raise UserFacingError("No learning path could be built for these skill gaps.")
-    return {"path": path.model_dump()}
+    return {
+        "path": path.model_dump(),
+        "gaps_without_courses": curriculum_architect.gaps_without_courses(
+            context.input["skill_gaps"], path
+        ),
+        "web_search_enabled": get_settings().tavily_api_key is not None,
+    }
 
 
 def _template_latex(template_id: str | None) -> str:

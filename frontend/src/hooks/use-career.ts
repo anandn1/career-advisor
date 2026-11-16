@@ -5,6 +5,7 @@ import { useEffect } from "react";
 
 import {
   api,
+  type CompanyFocus,
   type Interview,
   type Run,
   type RunKind,
@@ -22,6 +23,7 @@ export const keys = {
   runs: (id: string, kind?: RunKind) => ["runs", id, kind ?? "all"] as const,
   run: (id: string, runId: string) => ["run", id, runId] as const,
   interview: (id: string, interviewId: string) => ["interview", id, interviewId] as const,
+  interviewTopics: (id: string, company: string) => ["interview-topics", id, company] as const,
   templates: ["templates"] as const,
 };
 
@@ -58,7 +60,7 @@ export function useReport(sessionId: string) {
 export type Report = {
   session: Session;
   job_market: ({ run_id: string } & JobMarketResult) | null;
-  learning_path: ({ run_id: string } & { path: LearningPath }) | null;
+  learning_path: ({ run_id: string } & LearningPathResult) | null;
   resume: ({ run_id: string } & ResumeResult) | null;
   resume_review: ({ run_id: string } & { review: ResumeReview }) | null;
   interviews: { id: string; status: string; summary: string | null }[];
@@ -71,6 +73,8 @@ export type Job = {
   skills_required: string[];
   source?: "live" | "cached";
   scraped_at?: string | null;
+  /** The posting on LinkedIn; missing for postings found before links were kept. */
+  url?: string | null;
 };
 export type JobMarketResult = {
   jobs: Job[];
@@ -86,6 +90,12 @@ export type LearningPath = {
   skill_gaps: string[];
   recommendations: { skill_name: string; course_title: string; course_url: string; description: string }[];
 };
+/** Paths planned before these fields existed lack them. */
+export type LearningPathResult = {
+  path: LearningPath;
+  gaps_without_courses?: string[];
+  web_search_enabled?: boolean;
+};
 export type ResumeResult = {
   draft: import("@/lib/api/client").ResumeDraft;
   template_id: string | null;
@@ -98,6 +108,17 @@ export type ResumeReview = {
   weaknesses: string[];
   suggestions: string[];
 };
+
+/** The topics with questions for a company, and the ones picked from the session's skill gaps. */
+export function useInterviewTopics(sessionId: string, company: CompanyFocus) {
+  return useQuery({
+    queryKey: keys.interviewTopics(sessionId, company),
+    queryFn: async () =>
+      unwrap(await api.GET("/api/v1/sessions/{session_id}/interview-topics", {
+        params: { path: { session_id: sessionId }, query: { company_focus: company } },
+      })),
+  });
+}
 
 export function useRuns(sessionId: string, kinds: RunKind[]) {
   return useQuery({

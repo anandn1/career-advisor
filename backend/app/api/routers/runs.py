@@ -5,13 +5,11 @@ import logging
 import tempfile
 import time
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import (
     APIRouter,
     Depends,
-    File,
-    Form,
     Header,
     HTTPException,
     Request,
@@ -19,17 +17,25 @@ from fastapi import (
     UploadFile,
     status,
 )
+from fastapi.exceptions import RequestValidationError
 from fastapi.sse import EventSourceResponse, ServerSentEvent
+from pydantic import TypeAdapter, ValidationError
 from sqlalchemy.exc import IntegrityError
+from starlette.datastructures import UploadFile as StarletteUploadFile
 
 from app.agents.resume_strategist import ResumeProfile
 from app.api.deps import CurrentSession, Db, Runner
 from app.api.schemas import (
     MAX_REQUEST_LENGTH,
-    GithubSkillsRequest,
-    ResumeRenderRequest,
-    ResumeRequest,
+    UPLOAD_KINDS,
+    GithubSkillsRun,
+    JobMarketRun,
+    LearningPathRun,
+    ResumeRenderRun,
+    ResumeRun,
     RunOut,
+    RunRequest,
+    RunUpload,
 )
 from app.core.config import get_settings
 from app.db import career_sessions
@@ -95,43 +101,25 @@ async def _read_upload(upload: UploadFile) -> str:
     return text
 
 
-@router.post("/skills/resume", status_code=status.HTTP_202_ACCEPTED, response_model=RunOut)
-async def extract_skills_from_resume(
-    career_session: CurrentSession, db: Db, runner: Runner, file: Annotated[UploadFile, File()]
-):
-    text = await _read_upload(file)
-    return _start_run(db, runner, career_session, RunKind.SKILLS_FROM_RESUME, {"resume_text": text})
-
-
-@router.post("/skills/github", status_code=status.HTTP_202_ACCEPTED, response_model=RunOut)
-def extract_skills_from_github(
-    body: GithubSkillsRequest, career_session: CurrentSession, db: Db, runner: Runner
-):
+def _github_input(db, career_session: CareerSession, body: GithubSkillsRun) -> dict:
     try:
         username = github.parse_username(body.github_username)
     except github.InvalidUsernameError as error:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error)) from error
-    run_input = {"github_username": username}
-    return _start_run(db, runner, career_session, RunKind.SKILLS_FROM_GITHUB, run_input)
+    return {"github_username": username}
 
 
-@router.post("/job-market", status_code=status.HTTP_202_ACCEPTED, response_model=RunOut)
-def analyze_job_market(career_session: CurrentSession, db: Db, runner: Runner):
-    return _start_run(db, runner, career_session, RunKind.JOB_MARKET, {})
+def _job_market_input(db, career_session: CareerSession, body: JobMarketRun) -> dict:
+    return {}
 
 
-@router.post("/learning-path", status_code=status.HTTP_202_ACCEPTED, response_model=RunOut)
-def build_learning_path(career_session: CurrentSession, db: Db, runner: Runner):
-    analysis_run = career_sessions.latest_succeeded_run(db, career_session.id, RunKind.JOB_MARKET)
-    gaps = ((analysis_run.result or {}).get("analysis", {}) if analysis_run else {}).get(
-        "skill_gaps", []
-    )
+def _learning_path_input(db, career_session: CareerSession, body: LearningPathRun) -> dict:
+    analysis_run, gaps = career_sessions.latest_skill_gaps(db, career_session.id)
     if not gaps:
         raise HTTPException(
             status.HTTP_409_CONFLICT, "Run a job market analysis that finds skill gaps first"
         )
-    run_input = {"skill_gaps": gaps, "job_market_run_id": analysis_run.id}
-    return _start_run(db, runner, career_session, RunKind.LEARNING_PATH, run_input)
+    return {"skill_gaps": gaps, "job_market_run_id": analysis_run.id}
 
 
 def _check_template(db, template_id: str | None) -> None:
@@ -139,8 +127,7 @@ def _check_template(db, template_id: str | None) -> None:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Unknown template_id")
 
 
-@router.post("/resume", status_code=status.HTTP_202_ACCEPTED, response_model=RunOut)
-def generate_resume(body: ResumeRequest, career_session: CurrentSession, db: Db, runner: Runner):
+def _resume_input(db, career_session: CareerSession, body: ResumeRun) -> dict:
     _check_template(db, body.template_id)
     profile = ResumeProfile(
         target_role=career_session.target_role,
@@ -150,30 +137,84 @@ def generate_resume(body: ResumeRequest, career_session: CurrentSession, db: Db,
         work_experience=body.work_experience,
         skills=unique_ignoring_case([*career_session.skills, *body.extra_skills]),
     )
-    run_input = {"profile": profile.model_dump(), "template_id": body.template_id}
-    return _start_run(db, runner, career_session, RunKind.RESUME, run_input)
+    return {"profile": profile.model_dump(), "template_id": body.template_id}
 
 
-@router.post("/resume-render", status_code=status.HTTP_202_ACCEPTED, response_model=RunOut)
-def rerender_resume(
-    body: ResumeRenderRequest, career_session: CurrentSession, db: Db, runner: Runner
-):
+def _resume_render_input(db, career_session: CareerSession, body: ResumeRenderRun) -> dict:
     _check_template(db, body.template_id)
-    run_input = {"draft": body.draft.model_dump(), "template_id": body.template_id}
-    return _start_run(db, runner, career_session, RunKind.RESUME_RENDER, run_input)
+    return {"draft": body.draft.model_dump(), "template_id": body.template_id}
 
 
-@router.post("/resume-review", status_code=status.HTTP_202_ACCEPTED, response_model=RunOut)
-async def review_resume(
-    career_session: CurrentSession,
-    db: Db,
-    runner: Runner,
-    file: Annotated[UploadFile, File()],
-    request: Annotated[str, Form(max_length=MAX_REQUEST_LENGTH)] = "",
-):
-    text = await _read_upload(file)
-    run_input = {"resume_text": text, "request": request}
-    return _start_run(db, runner, career_session, RunKind.RESUME_REVIEW, run_input)
+_INPUT_FOR_KIND = {
+    RunKind.SKILLS_FROM_GITHUB: _github_input,
+    RunKind.JOB_MARKET: _job_market_input,
+    RunKind.LEARNING_PATH: _learning_path_input,
+    RunKind.RESUME: _resume_input,
+    RunKind.RESUME_RENDER: _resume_render_input,
+}
+_RUN_REQUEST = TypeAdapter(RunRequest)
+
+
+def _json_body(raw: bytes):
+    try:
+        return _RUN_REQUEST.validate_json(raw)
+    except ValidationError as error:  # reported like FastAPI's own body errors
+        errors = error.errors(include_url=False)
+        raise RequestValidationError([{**e, "loc": ("body", *e["loc"])} for e in errors]) from None
+
+
+async def _upload_input(form) -> tuple[RunKind, dict]:
+    """(kind, run input) from the multipart form of a run that reads a resume file."""
+    kind, upload, request = form.get("kind"), form.get("file"), form.get("request") or ""
+    if kind not in UPLOAD_KINDS:
+        allowed = ", ".join(UPLOAD_KINDS)
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, f"A form upload needs a kind of: {allowed}"
+        )
+    if not isinstance(upload, StarletteUploadFile):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Attach the resume as 'file'")
+    if not isinstance(request, str) or len(request) > MAX_REQUEST_LENGTH:
+        limit = f"'request' is limited to {MAX_REQUEST_LENGTH} characters"
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, limit)
+    run_input = {"resume_text": await _read_upload(upload)}
+    if kind == RunKind.RESUME_REVIEW:
+        run_input["request"] = request
+    return RunKind(kind), run_input
+
+
+JSON, FORM = "application/json", "multipart/form-data"
+# The bodies POST /runs reads itself, by media type: (schema name, type). main.py adds the
+# schemas to the API description, since FastAPI cannot list a body it does not parse.
+RUN_BODIES = {JSON: ("RunRequest", RunRequest), FORM: ("RunUpload", RunUpload)}
+SCHEMA_REF = "#/components/schemas/{model}"
+START_RUN_BODY = {
+    "requestBody": {
+        "required": True,
+        "content": {
+            media: {"schema": {"$ref": SCHEMA_REF.format(model=name)}}
+            for media, (name, _) in RUN_BODIES.items()
+        },
+    }
+}
+
+
+@router.post(
+    "", status_code=status.HTTP_202_ACCEPTED, response_model=RunOut, openapi_extra=START_RUN_BODY
+)
+async def start_run(request: Request, career_session: CurrentSession, db: Db, runner: Runner):
+    """Start a run of any kind: JSON picked by "kind", or a form for a resume file."""
+    media_type = request.headers.get("content-type", "").split(";")[0].strip().lower()
+    if media_type == FORM:
+        kind, run_input = await _upload_input(await request.form())
+    elif media_type == JSON:
+        body = _json_body(await request.body())
+        kind, run_input = body.kind, _INPUT_FOR_KIND[body.kind](db, career_session, body)
+    else:
+        raise HTTPException(
+            status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            "Send JSON, or a multipart form to upload a resume",
+        )
+    return _start_run(db, runner, career_session, kind, run_input)
 
 
 @router.get("", response_model=list[RunOut])
@@ -261,18 +302,19 @@ def _resume_file(db, career_session: CareerSession, run_id: str):
     return run.resume_file
 
 
-@router.get("/{run_id}/resume.tex")
-def download_resume_latex(run_id: str, career_session: CurrentSession, db: Db):
-    resume_file = _resume_file(db, career_session, run_id)
-    headers = {"Content-Disposition": 'attachment; filename="resume.tex"'}
-    return Response(resume_file.latex, media_type="application/x-tex", headers=headers)
-
-
-@router.get("/{run_id}/resume.pdf")
-def download_resume_pdf(
-    run_id: str, career_session: CurrentSession, db: Db, download: bool = False
+@router.get("/{run_id}/resume")
+def download_resume(
+    run_id: str,
+    career_session: CurrentSession,
+    db: Db,
+    format: Literal["pdf", "tex"] = "pdf",  # noqa: A002 (the query parameter's name)
+    download: bool = False,
 ):
+    """The resume a run wrote: the PDF (shown in the page unless `download`) or its LaTeX."""
     resume_file = _resume_file(db, career_session, run_id)
+    if format == "tex":
+        headers = {"Content-Disposition": 'attachment; filename="resume.tex"'}
+        return Response(resume_file.latex, media_type="application/x-tex", headers=headers)
     if resume_file.pdf is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No PDF was produced for this resume")
     disposition = "attachment" if download else "inline"

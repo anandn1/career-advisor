@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError, postForm, runEventsUrl, runUrl, unwrap, uploadResume } from "@/lib/api/client";
+import { ApiError, postForm, runEventsUrl, resumeUrl, unwrap, uploadResume } from "@/lib/api/client";
 import { jsonResponse } from "@/test/render";
 
 const response = (status: number) => new Response(null, { status });
@@ -80,7 +80,8 @@ describe("postForm and uploadResume", () => {
     const run = await uploadResume("s1", new File(["cv"], "cv.txt"), "skills");
     const [url, init] = fetchMock.mock.calls[0];
     expect(run).toEqual({ id: "r1" });
-    expect(url).toMatch(/\/api\/v1\/sessions\/s1\/runs\/skills\/resume$/);
+    expect(url).toMatch(/\/api\/v1\/sessions\/s1\/runs$/);
+    expect((init.body as FormData).get("kind")).toBe("skills_from_resume");
     expect((init.body as FormData).get("file")).toBeInstanceOf(File);
     expect((init.body as FormData).has("request")).toBe(false);
     expect(init.method).toBe("POST");
@@ -91,7 +92,8 @@ describe("postForm and uploadResume", () => {
     vi.stubGlobal("fetch", fetchMock);
     await uploadResume("s1", new File(["cv"], "cv.pdf"), "review", "Be blunt");
     const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toMatch(/\/runs\/resume-review$/);
+    expect(url).toMatch(/\/api\/v1\/sessions\/s1\/runs$/);
+    expect((init.body as FormData).get("kind")).toBe("resume_review");
     expect((init.body as FormData).get("request")).toBe("Be blunt");
   });
 
@@ -108,7 +110,9 @@ describe("postForm and uploadResume", () => {
 
 describe("URLs", () => {
   it("builds resume file and event stream URLs", () => {
-    expect(runUrl("s1", "r1", "resume.pdf")).toMatch(/\/api\/v1\/sessions\/s1\/runs\/r1\/resume\.pdf$/);
+    expect(resumeUrl("s1", "r1", "pdf")).toMatch(/\/api\/v1\/sessions\/s1\/runs\/r1\/resume\?format=pdf$/);
+    expect(resumeUrl("s1", "r1", "pdf", { download: true })).toMatch(/\/runs\/r1\/resume\?format=pdf&download=true$/);
+    expect(resumeUrl("s1", "r1", "tex")).toMatch(/\/runs\/r1\/resume\?format=tex$/);
     expect(runEventsUrl("s1", "r1")).toMatch(/\/api\/v1\/sessions\/s1\/runs\/r1\/events$/);
   });
 });
