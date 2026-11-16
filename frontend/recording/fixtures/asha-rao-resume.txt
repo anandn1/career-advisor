@@ -1,0 +1,19 @@
+Asha Rao
+Backend Engineer · Bengaluru · asha.rao@example.com
+(A fictional candidate, written for the Career Advisor demo.)
+
+Summary
+Backend engineer with three years of building payment APIs in Python.
+
+Experience
+Backend Engineer, Acme Payments, Bengaluru (Jul 2022 – present)
+- Built FastAPI services in Python that handle about 2 million requests a day
+- Moved nightly batch jobs to AWS Lambda and managed the infrastructure with Terraform
+- Ran PostgreSQL and Redis in production and containerised every service with Docker
+- Added unit and integration tests with pytest, raising coverage from 55% to 85%
+
+Education
+B.Tech in Computer Science, Deccan Institute of Technology (graduated 2022)
+
+Skills
+Python, FastAPI, PostgreSQL, Redis, Docker, AWS Lambda, Terraform, pytest, Git
