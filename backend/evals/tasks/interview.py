@@ -105,7 +105,7 @@ def answer_grading(ctx: TaskContext) -> list[CaseResult]:
     ]
 
 
-DECISIONS = ("FOLLOW_UP", "NEW_QUESTION")
+DECISIONS = coach.DECISIONS
 
 
 class UnreadableDecisionError(RuntimeError):

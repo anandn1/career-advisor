@@ -47,6 +47,7 @@ EVALUATION_ERROR = "error"
 MAX_FOLLOW_UPS_PER_QUESTION = 2
 NO_QUESTION_IDS = {"NONE", "ERROR", "DONE"}
 FOLLOW_UP_MARKER = "\n[FOLLOW-UP]: "
+DECISIONS = ("FOLLOW_UP", "NEW_QUESTION")  # the replies the follow-up router asks for
 # A bad answer that says the candidate does not know: a follow-up would only ask again.
 _NON_ATTEMPT = re.compile(
     r"\b(?:don['’]?t|do not) (?:really )?know\b|\bdunno\b|\bno (?:idea|clue)\b|\bnot sure\b"
@@ -498,7 +499,7 @@ def _named_decisions(reply: str) -> set[str]:
     """The decisions a reply names, read leniently ("**Follow-up**" is FOLLOW_UP). A reply
     naming both ("NEW_QUESTION, no FOLLOW_UP needed") is unclear, so the interview moves on."""
     text = re.sub(r"[\s-]+", "_", reply.upper())
-    return {decision for decision in ("FOLLOW_UP", "NEW_QUESTION") if decision in text}
+    return {decision for decision in DECISIONS if decision in text}
 
 
 def decide_action_router(

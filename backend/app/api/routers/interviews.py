@@ -26,9 +26,8 @@ topics_router = APIRouter(prefix="/sessions/{session_id}/interview-topics", tags
 
 
 def _default_topics(db, career_session: CareerSession, company_focus: str) -> list[str]:
-    analysis_run = career_sessions.latest_succeeded_run(db, career_session.id, RunKind.JOB_MARKET)
-    analysis = (analysis_run.result or {}).get("analysis", {}) if analysis_run else {}
-    return interview_coach.topics_for_skill_gaps(analysis.get("skill_gaps", []), company_focus)
+    _, gaps = career_sessions.latest_skill_gaps(db, career_session.id)
+    return interview_coach.topics_for_skill_gaps(gaps, company_focus)
 
 
 def _chosen_topics(topics: list[str], company_focus: str) -> list[str]:

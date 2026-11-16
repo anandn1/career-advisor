@@ -14,7 +14,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import TypeAdapter
 
 from app.api.routers import interviews, runs, sessions, templates
-from app.api.schemas import RunRequest, RunUpload
 from app.core.config import get_settings
 from app.db import career_sessions
 from app.db.session import session_scope
@@ -25,7 +24,6 @@ from app.services.runner import RunExecutor
 logger = logging.getLogger(__name__)
 
 API_PREFIX = "/api/v1"
-SCHEMA_REF = "#/components/schemas/{model}"
 CLEANUP_INTERVAL_SECONDS = 6 * 60 * 60
 RESTART_REASON = "The server restarted while this run was in progress. Please run it again."
 
@@ -75,8 +73,7 @@ async def lifespan(app: FastAPI):
 
 
 def _describe_run_bodies(app: FastAPI) -> None:
-    """Add the run request bodies to the API description: POST /runs reads them itself,
-    because it takes JSON or a multipart form, so FastAPI cannot list them."""
+    """Add the bodies POST /runs reads itself (JSON or a form) to the API description."""
     build = app.openapi
 
     def openapi() -> dict:
@@ -84,8 +81,8 @@ def _describe_run_bodies(app: FastAPI) -> None:
             return app.openapi_schema
         schema = build()
         components = schema.setdefault("components", {}).setdefault("schemas", {})
-        for name, body in {"RunRequest": RunRequest, "RunUpload": RunUpload}.items():
-            body_schema = TypeAdapter(body).json_schema(ref_template=SCHEMA_REF)
+        for name, body in runs.RUN_BODIES.values():
+            body_schema = TypeAdapter(body).json_schema(ref_template=runs.SCHEMA_REF)
             for model, model_schema in body_schema.pop("$defs", {}).items():
                 components.setdefault(model, model_schema)
             components[name] = body_schema

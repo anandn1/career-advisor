@@ -66,6 +66,13 @@ def latest_succeeded_run(db: Session, session_id: str, kind: RunKind) -> AgentRu
     return db.scalars(query).first()
 
 
+def latest_skill_gaps(db: Session, session_id: str) -> tuple[AgentRun | None, list[str]]:
+    """The latest successful job market analysis and the skill gaps it found."""
+    run = latest_succeeded_run(db, session_id, RunKind.JOB_MARKET)
+    analysis = (run.result or {}).get("analysis", {}) if run else {}
+    return run, analysis.get("skill_gaps", [])
+
+
 def unfinished_run(db: Session, session_id: str, kind: RunKind) -> AgentRun | None:
     query = select(AgentRun).where(
         AgentRun.session_id == session_id, AgentRun.kind == kind, AgentRun.status.in_(UNFINISHED)

@@ -35,6 +35,7 @@ from app.api.schemas import (
     ResumeRun,
     RunOut,
     RunRequest,
+    RunUpload,
 )
 from app.core.config import get_settings
 from app.db import career_sessions
@@ -113,10 +114,7 @@ def _job_market_input(db, career_session: CareerSession, body: JobMarketRun) -> 
 
 
 def _learning_path_input(db, career_session: CareerSession, body: LearningPathRun) -> dict:
-    analysis_run = career_sessions.latest_succeeded_run(db, career_session.id, RunKind.JOB_MARKET)
-    gaps = ((analysis_run.result or {}).get("analysis", {}) if analysis_run else {}).get(
-        "skill_gaps", []
-    )
+    analysis_run, gaps = career_sessions.latest_skill_gaps(db, career_session.id)
     if not gaps:
         raise HTTPException(
             status.HTTP_409_CONFLICT, "Run a job market analysis that finds skill gaps first"
@@ -184,12 +182,17 @@ async def _upload_input(form) -> tuple[RunKind, dict]:
     return RunKind(kind), run_input
 
 
+JSON, FORM = "application/json", "multipart/form-data"
+# The bodies POST /runs reads itself, by media type: (schema name, type). main.py adds the
+# schemas to the API description, since FastAPI cannot list a body it does not parse.
+RUN_BODIES = {JSON: ("RunRequest", RunRequest), FORM: ("RunUpload", RunUpload)}
+SCHEMA_REF = "#/components/schemas/{model}"
 START_RUN_BODY = {
     "requestBody": {
         "required": True,
         "content": {
-            "application/json": {"schema": {"$ref": "#/components/schemas/RunRequest"}},
-            "multipart/form-data": {"schema": {"$ref": "#/components/schemas/RunUpload"}},
+            media: {"schema": {"$ref": SCHEMA_REF.format(model=name)}}
+            for media, (name, _) in RUN_BODIES.items()
         },
     }
 }
@@ -201,9 +204,9 @@ START_RUN_BODY = {
 async def start_run(request: Request, career_session: CurrentSession, db: Db, runner: Runner):
     """Start a run of any kind: JSON picked by "kind", or a form for a resume file."""
     media_type = request.headers.get("content-type", "").split(";")[0].strip().lower()
-    if media_type == "multipart/form-data":
+    if media_type == FORM:
         kind, run_input = await _upload_input(await request.form())
-    elif media_type == "application/json":
+    elif media_type == JSON:
         body = _json_body(await request.body())
         kind, run_input = body.kind, _INPUT_FOR_KIND[body.kind](db, career_session, body)
     else:
