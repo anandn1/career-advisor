@@ -45,7 +45,7 @@ test("Asha's route to Backend Engineer", async ({ page }) => {
     // A full-page capture would paint the sticky route bar where the page is scrolled to.
     const unstick = await page.addStyleTag({ content: "header.sticky { position: static !important; }" });
     await page.screenshot({ path: path.join(SCREENSHOTS, `${name}.png`), fullPage: true });
-    await unstick.evaluate((style) => style.remove());
+    await unstick.evaluate((style) => (style as HTMLStyleElement).remove());
   }
 
   const type = (field: Locator, text: string) => field.pressSequentially(text, { delay: TYPING_DELAY });
